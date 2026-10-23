@@ -1,0 +1,144 @@
+# gRPC API 설계 (`webp.v1`)
+
+- 상태: 초안 (ADR-0003, ADR-0004가 accepted되면 함께 확정)
+- 정의 파일: [proto/webp/v1/webp_service.proto](../../proto/webp/v1/webp_service.proto), [proto/webp/v1/image.proto](../../proto/webp/v1/image.proto)
+- 관련: [ADR-0003 전송 방식](../adr/0003-transport.md), [ADR-0004 픽셀 전송 포맷](../adr/0004-pixel-transfer-format.md), [목표와 제약](goals-and-constraints.md)
+
+## 1. 서비스 개요
+
+| RPC | 형태 | 용도 | ImageIO 대응 |
+|---|---|---|---|
+| `GetInfo` | unary | 서버·libwebp 버전, 서버 상한 | 클라이언트 초기화, 진단 |
+| `GetFeatures` | 클라이언트 스트리밍 | 크기, alpha, 애니메이션 정보, 메타데이터 (픽셀 디코딩 없음) | `getNumImages`, `getWidth`, `getHeight`, `getImageMetadata`, `getStreamMetadata` |
+| `Decode` | 양방향 (half-duplex) | 정지 이미지 또는 합성된 i번째 프레임 하나 | `read(i)` |
+| `DecodeAnimation` | 양방향 (half-duplex) | 합성된 프레임을 0번부터 차례로 | 순차 프레임 읽기 |
+| `Encode` | 양방향 (half-duplex) | 정지 이미지 인코딩 + 메타데이터 삽입 | `ImageWriter.write` |
+| `EncodeAnimation` | 양방향 (half-duplex) | 애니메이션 인코딩 | `prepareWriteSequence` / `writeToSequence` / `endWriteSequence` |
+| `grpc.health.v1.Health/Check`, `Watch` | 표준 | 헬스체크 | 클라이언트 진단, 컨테이너 probe |
+
+헬스체크를 따로 정의하지 않고 표준 [gRPC Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md)을 쓴다. 서버 구현 후보 언어(Rust `tonic-health`, Go `google.golang.org/grpc/health`) 모두 구현체를 제공한다(상세: [docs/research/0003](../research/0003-server-language-rust-vs-go.md)).
+
+`canDecodeInput`은 RPC를 쓰지 않는다. 입력 앞 12바이트가 `RIFF` + 4바이트 크기 + `WEBP`인지 로컬에서만 검사한다(RFC 9649 §2.4).
+
+## 2. 스트리밍 규칙
+
+### 2.1 왜 스트리밍인가
+
+압축 해제된 RGBA는 크다. 3840×2160 한 장이 33,177,600바이트로, gRPC 기본 수신 한도(4MB)의 8배다. 한도를 올리는 대신 모든 큰 데이터를 조각으로 나눈다. 그러면 **어떤 메시지도 기본 한도를 넘지 않는다**는 불변식이 생기고, 클라이언트와 서버 어느 쪽도 메시지 한도를 조정할 필요가 없다. 근거와 대안 비교는 ADR-0003.
+
+### 2.2 메시지 순서
+
+모든 스트리밍 RPC는 같은 모양을 따른다.
+
+```
+요청:  options ─ data ─ data ─ … ─ (half-close)
+응답:                                  header ─ data ─ data ─ … ─ (status OK)
+```
+
+- 요청 첫 메시지는 `options`(oneof), 이후는 데이터 조각이다. 순서가 어긋나면 `INVALID_ARGUMENT`.
+- 서버는 요청 스트림이 닫힌 뒤 응답을 시작한다(half-duplex). 입력 전체가 있어야 libwebp가 디코딩할 수 있기 때문이다(`WebPAnimDecoderNew`는 비트스트림 전체를 요구한다 — libwebp `src/webp/demux.h`).
+- 응답 헤더(`FrameHeader.pixel_bytes`, `EncodedHeader.webp_bytes`)가 뒤따를 조각의 바이트 합계를 선언한다. 수신 측은 이 값을 상한과 비교한 뒤에 버퍼를 할당한다.
+- 조각 하나의 크기는 1바이트 이상 `Limits.max_chunk_bytes` 이하다. 조각 경계는 행 경계와 맞지 않을 수 있다.
+- 애니메이션 응답(`DecodeAnimation`)은 `features` 다음에 프레임마다 `frame` 헤더 + 픽셀 조각들이 반복된다.
+- 애니메이션 요청(`EncodeAnimation`)은 프레임 수를 미리 알리지 않는다. ImageIO 시퀀스 쓰기는 `endWriteSequence` 전까지 프레임 수를 모르기 때문이다. 서버가 받는 대로 세고 상한을 넘으면 거부한다.
+
+### 2.3 Decode 시퀀스 (정지 이미지)
+
+```mermaid
+sequenceDiagram
+    participant App as 애플리케이션
+    participant R as WebPImageReader
+    participant S as 서버(libwebp)
+    App->>R: ImageIO.read(input)
+    R->>R: canDecodeInput: RIFF/WEBP 매직 확인 (로컬)
+    R->>S: Decode: options(input_bytes, frame_index=0, max_pixels)
+    R->>S: webp_data 조각 … / half-close
+    S->>S: WebPGetFeatures로 크기 확인, 상한 초과면 RESOURCE_EXHAUSTED
+    S->>S: WebPDecodeRGBAInto
+    S-->>R: header(width, height, RGBA8, pixel_bytes)
+    R->>R: pixel_bytes를 클라이언트 상한과 비교한 뒤 버퍼 할당
+    S-->>R: pixels 조각 … / OK
+    R-->>App: BufferedImage
+```
+
+### 2.4 애니메이션 읽기
+
+- `getNumImages(true)`는 `GetFeatures`의 `frame_count`를 쓴다.
+- `read(i)`는 `Decode(frame_index = i)`를 쓴다. 서버는 0번부터 i번까지 합성한다(`WebPAnimDecoder`는 순차 합성만 지원). 그래서 `read(0)`, `read(1)`, … 를 차례로 부르면 총 비용이 O(n²)이다.
+- 합성 결과는 libwebp `WebPAnimDecoder` 동작을 따른다. libwebp는 ANIM 배경색을 무시하고 캔버스를 투명으로 초기화한다([research/0005](../research/0005-test-samples.md)). 배경색은 `AnimationInfo.background_color_argb`로 따로 알린다.
+- 순차 읽기 효율을 위해 `DecodeAnimation`을 둔다. 리더가 스트림 하나를 열어 두고 `read(i)`가 직전 인덱스 + 1이면 그 스트림에서 다음 프레임을 꺼내는 방식이 후보다. 구체적인 정책(언제 스트림을 열고 닫는가)은 Phase 3에서 정한다.
+
+## 3. 상한과 decompression bomb 방어
+
+| 상한 (`Limits`) | 의미 | 서버 검사 시점 | 초안값 |
+|---|---|---|---|
+| `max_input_bytes` | 압축 입력 크기 | `options.input_bytes` 수신 즉시, 조각 수신 중 누적값 | 64 MiB |
+| `max_pixels` | 캔버스 width × height | 헤더 파싱 직후, 픽셀 버퍼 할당 전 | 8192 × 8192 (67,108,864) |
+| `max_frames` | 애니메이션 프레임 수 | demux 직후(디코딩), 프레임 수신 중(인코딩) | 1,000 |
+| `max_metadata_bytes` | ICC+EXIF+XMP 합 | demux 직후, `options` 수신 즉시(인코딩) | 2 MiB |
+| `max_chunk_bytes` | 조각 하나 크기 | 조각 수신마다 | 1 MiB (ADR-0003) |
+
+- 픽셀 수 상한이 필요한 근거: VP8X 캔버스만 16384×16384로 바꾼 298바이트짜리 유효한 애니메이션 파일 하나로 디코더가 1GiB 할당을 시도한다([research/0005](../research/0005-test-samples.md) "손상/악성 입력").
+- **초안값은 근거 없는 출발점이다.** Phase 1에서 컨테이너 메모리 제한과 함께 정하고 근거를 이 표에 적는다.
+- 클라이언트는 `DecodeOptions.max_pixels`로 더 엄격한 상한을 보낼 수 있다. 서버는 둘 중 작은 값을 적용한다.
+- 클라이언트도 응답 `FrameHeader`를 받으면 할당 전에 다시 검증한다. Java 배열 한도(약 2^31 원소) 때문에 RGBA8 `byte[]` 하나로는 약 5.3억 픽셀을 넘을 수 없다. libwebp 최대 크기(16383 × 16383 ≈ 2.7억 픽셀)는 그 안에 든다.
+- 정지 이미지는 `WebPGetFeatures`로, 애니메이션은 `WebPDemux`의 캔버스 크기와 프레임 수로 검사한다.
+
+## 4. 오류 매핑
+
+서버는 gRPC status code와 영어 메시지로 오류를 알린다. v1에서는 `google.rpc` 상세(error details)를 쓰지 않는다(필요해지면 추가 — 열린 질문 참고).
+
+| 상황 | status | libwebp 원인 예 | 클라이언트 처리 |
+|---|---|---|---|
+| 서버에 연결할 수 없음, 서버 재시작·크래시, 종료 중 | `UNAVAILABLE` | (프로세스 크래시) | `IIOException("WebP server unavailable: <endpoint>", cause)` |
+| 데드라인 초과 | `DEADLINE_EXCEEDED` | - | `IIOException("WebP server timed out after <n> ms", cause)` |
+| WebP가 아님, 손상, 잘림 | `INVALID_ARGUMENT` | `VP8_STATUS_BITSTREAM_ERROR`, `VP8_STATUS_NOT_ENOUGH_DATA`, `VP8_STATUS_UNSUPPORTED_FEATURE`, `WEBP_MUX_BAD_DATA` | `IIOException("Invalid or corrupted WebP data: <message>", cause)` |
+| 프로토콜 위반 (메시지 순서, 선언 크기 불일치, 조각 크기 초과), 잘못된 옵션 | `INVALID_ARGUMENT` | - | `IIOException` (클라이언트 버그이므로 메시지에 RPC 이름 포함) |
+| 서버 상한 초과 | `RESOURCE_EXHAUSTED` | - | `IIOException("WebP image exceeds server limit: <message>", cause)` |
+| 메모리 할당 실패 | `RESOURCE_EXHAUSTED` | `VP8_STATUS_OUT_OF_MEMORY`, `WEBP_MUX_MEMORY_ERROR` | 위와 같음 |
+| 프레임 번호 범위 밖 | `OUT_OF_RANGE` | - | 클라이언트가 먼저 `IndexOutOfBoundsException`을 던진다(ImageReader 규약). 서버 응답은 방어선이다. |
+| 아직 구현하지 않은 RPC | `UNIMPLEMENTED` | - | `IIOException` |
+| 그 밖의 서버 내부 오류 | `INTERNAL` | `VP8_STATUS_INVALID_PARAM`(서버 버그) | `IIOException` |
+| 클라이언트 취소 | `CANCELLED` | `VP8_STATUS_USER_ABORT` | 호출 측 중단 처리 |
+
+핵심은 **서버 불가(`UNAVAILABLE`/`DEADLINE_EXCEEDED`)와 입력 문제(`INVALID_ARGUMENT`/`RESOURCE_EXHAUSTED`)를 메시지만 보고도 구분할 수 있게** 하는 것이다. 클라이언트는 `StatusRuntimeException`을 항상 cause로 넘긴다.
+
+## 5. 클라이언트 설정
+
+SPI는 인자 없는 생성자로 전역 등록되므로 설정을 주입할 수 없다. 각 값은 **시스템 프로퍼티 → 환경변수 → 기본값** 순서로 해석한다.
+
+| 설정 | 시스템 프로퍼티 | 환경변수 | 기본값 (초안) |
+|---|---|---|---|
+| 엔드포인트 (gRPC target) | `webp.imageio.endpoint` | `WEBP_IMAGEIO_ENDPOINT` | `unix:///run/webp-imageio/webp.sock` |
+| 호출 데드라인 | `webp.imageio.deadline-ms` | `WEBP_IMAGEIO_DEADLINE_MS` | `30000` |
+| 클라이언트 픽셀 상한 | `webp.imageio.max-pixels` | `WEBP_IMAGEIO_MAX_PIXELS` | 없음 (서버 상한만 적용) |
+
+- 엔드포인트는 gRPC target 문자열이다. UDS는 `unix:///절대/경로`, TCP는 `dns:///host:port` 또는 `host:port`.
+- 기본 엔드포인트와 Windows 개발 환경 처리는 ADR-0003을 따른다.
+
+## 6. 언어별 생성 옵션
+
+proto 파일에는 `java_package`, `go_package` 같은 언어별 옵션을 넣지 않았다. 서버 언어(ADR-0002)와 클라이언트 패키지 이름(ADR-0005)이 정해지면 `buf.gen.yaml`의 managed mode로 지정한다.
+
+## 7. 검증
+
+```sh
+# 저장소 루트에서. 로컬에 buf가 없으면 Docker로 실행한다.
+docker run --rm --network none -e BUF_CACHE_DIR=/tmp/buf-cache \
+  -v "$PWD:/workspace:ro" -w /workspace bufbuild/buf:1.75.0 lint
+```
+
+`buf.yaml`은 `STANDARD`와 `COMMENTS` 규칙을 쓴다. `COMMENTS`가 서비스, RPC, 메시지, 필드, oneof, enum, enum 값의 주석 누락을 잡는다([주석 규칙](../conventions/code-documentation.md)).
+
+## 8. 열린 질문
+
+| 질문 | 현재 판단 | 정할 때 |
+|---|---|---|
+| Java에서 클라이언트/양방향 스트리밍을 어떻게 동기 API(ImageReader)로 감쌀까 | grpc-java 블로킹 스텁은 unary와 서버 스트리밍용이다. async 스텁 + 블로킹 어댑터로 구현한다. 최신 grpc-java의 블로킹 양방향 지원 여부는 미확인. | Phase 2 |
+| 같은 입력을 RPC마다 다시 보내는 비용 | `GetFeatures` 다음 `Decode`에서 압축 입력을 두 번 보낸다. 압축 데이터는 작고 UDS라 우선 허용한다. 서버 쪽 세션/핸들 캐시는 상태가 생겨 단순함을 해치므로 측정 후 판단한다. | Phase 4 |
+| 오류 상세 (`google.rpc.ErrorInfo`) | v1은 status code + 메시지만 쓴다. 클라이언트가 상한 종류 같은 구조화 정보를 필요로 하면 추가한다. | Phase 2 |
+| 공유 메모리 전송 (memfd + UDS fd 전달) | gRPC 밖의 최적화다. 벤치마크에서 복사 비용이 지배적일 때만 검토한다. | Phase 4 이후 |
+| 애니메이션 순차 읽기 정책 | 2.4절 후보. | Phase 3 |
+| ICC 색 변환을 클라이언트에서 할까 | 서버는 ICC를 픽셀에 적용하지 않는다(ADR-0004). | Phase 3 |
+| Java 클라이언트의 JNI 없는 UDS | JDK `UnixDomainSocketAddress` + Netty NIO 경로가 grpc-java에서 동작하는지 미확인. PoC 결과에 따라 ADR-0003을 유지하거나 새 ADR을 쓴다. | Phase 2 첫 작업 |
+| gRPC 채널 수명 | 처음 쓸 때 만드는 공유 채널 하나. JDK 26부터 레지스트리 GC 시 `onDeregistration`이 호출되지 않으므로 정리를 거기에 맡기지 않는다([research/0004](../research/0004-jdk-baseline.md)). 데몬 스레드를 쓰는 등 JVM 종료를 막지 않는 방식을 정한다. | Phase 2 |

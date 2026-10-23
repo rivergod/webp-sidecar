@@ -1,0 +1,278 @@
+syntax = "proto3";
+
+// webp.v1은 libwebp 사이드카 서버와 클라이언트 사이의 계약이다.
+// 이 파일은 WebPService와 각 RPC의 요청/응답 메시지를 정의한다.
+// 설명 문서: docs/design/grpc-api.md
+package webp.v1;
+
+import "webp/v1/image.proto";
+
+// WebPService는 libwebp로 WebP를 디코딩·인코딩하고 메타데이터를 읽고 쓴다.
+//
+// 스트리밍 공통 규칙 (ADR-0003):
+// - 압축된 WebP 바이트와 픽셀은 Limits.max_chunk_bytes 이하의 조각으로 나눠 보낸다.
+//   어떤 메시지도 gRPC 기본 메시지 한도(4MB)를 넘지 않게 한다.
+// - 요청 스트림: 첫 메시지는 options, 그 뒤는 데이터 조각이다. 클라이언트는 마지막 조각을 보낸 뒤
+//   요청 스트림을 닫는다(half-close). 서버는 요청 스트림이 닫힌 뒤에 응답을 보내기 시작한다.
+// - 응답 스트림: 헤더 메시지 뒤에 그 헤더가 선언한 바이트 수만큼 데이터 조각이 온다.
+//   서버는 마지막 조각을 보낸 뒤 OK로 끝낸다. 오류는 언제든 gRPC status로 끝낸다.
+// - 오류 status 매핑은 docs/design/grpc-api.md "오류 매핑"을 따른다.
+//
+// 헬스체크는 이 서비스가 아니라 표준 grpc.health.v1.Health 서비스로 제공한다.
+service WebPService {
+  // GetInfo는 서버와 libwebp 버전, 서버 상한을 돌려준다. 입력이 없고 부작용이 없다.
+  rpc GetInfo(GetInfoRequest) returns (GetInfoResponse);
+
+  // GetFeatures는 픽셀을 디코딩하지 않고 크기, alpha, 애니메이션 정보, 메타데이터를 돌려준다.
+  // 요청 스트림: options 1개 → webp_data 조각 1개 이상 → half-close.
+  rpc GetFeatures(stream GetFeaturesRequest) returns (GetFeaturesResponse);
+
+  // Decode는 정지 이미지 또는 애니메이션의 합성된 프레임 하나를 디코딩한다.
+  // 서버는 디코딩 전에 헤더로 캔버스 크기를 검사한다(decompression bomb 방어).
+  // 요청 스트림: options 1개 → webp_data 조각 1개 이상 → half-close.
+  // 응답 스트림: header 1개 → pixels 조각들(합계 header.pixel_bytes) → OK.
+  rpc Decode(stream DecodeRequest) returns (stream DecodeResponse);
+
+  // DecodeAnimation은 애니메이션의 합성된 프레임을 0번부터 차례로 스트리밍한다.
+  // 순차 읽기용이다. 임의 프레임 하나는 Decode의 frame_index를 쓴다.
+  // 정지 이미지도 받으며, 이때 프레임 1개를 보낸다.
+  // 요청 스트림: options 1개 → webp_data 조각 1개 이상 → half-close.
+  // 응답 스트림: features 1개 → (frame 1개 → pixels 조각들) × frame_count → OK.
+  // 클라이언트가 읽지 않으면 gRPC 흐름 제어로 서버 전송이 멈춘다. 중단하려면 RPC를 취소한다.
+  rpc DecodeAnimation(stream DecodeAnimationRequest) returns (stream DecodeAnimationResponse);
+
+  // Encode는 정지 이미지 하나를 WebP로 인코딩하고, 요청한 메타데이터를 넣는다.
+  // 요청 스트림: options 1개 → pixels 조각들(합계 width × height × 4) → half-close.
+  // 응답 스트림: header 1개 → webp_data 조각들(합계 header.webp_bytes) → OK.
+  rpc Encode(stream EncodeRequest) returns (stream EncodeResponse);
+
+  // EncodeAnimation은 전체 캔버스 크기의 프레임들로 애니메이션 WebP를 만든다.
+  // 프레임 간 차분과 부분 사각형 계산은 서버(libwebp WebPAnimEncoder)가 한다.
+  // 요청 스트림: options 1개 → (frame 1개 → pixels 조각들) × N(N ≥ 1) → half-close.
+  // 프레임 수는 미리 알리지 않는다(ImageIO 시퀀스 쓰기는 끝날 때까지 프레임 수를 모른다).
+  // 서버는 프레임을 받는 대로 세고, Limits.max_frames를 넘는 순간 RESOURCE_EXHAUSTED로 끝낸다.
+  // 응답 스트림: header 1개 → webp_data 조각들(합계 header.webp_bytes) → OK.
+  rpc EncodeAnimation(stream EncodeAnimationRequest) returns (stream EncodeAnimationResponse);
+}
+
+// GetInfoRequest는 GetInfo의 요청이다. 필드가 없다.
+message GetInfoRequest {}
+
+// GetInfoResponse는 서버 정보다.
+message GetInfoResponse {
+  // 서버 구현의 버전 문자열(예: "0.1.0").
+  string server_version = 1;
+  // 서버에 링크된 libwebp 라이브러리 버전.
+  LibwebpVersions libwebp = 2;
+  // 서버가 적용하는 상한.
+  Limits limits = 3;
+  // 서버가 지원하는 픽셀 포맷. PIXEL_FORMAT_UNSPECIFIED는 포함하지 않는다.
+  repeated PixelFormat pixel_formats = 4;
+}
+
+// LibwebpVersions는 libwebp 각 라이브러리의 버전이다.
+// 값은 WebPGet{Decoder,Encoder,Demux,Mux}Version()이 돌려준 정수를 "major.minor.revision"으로 바꾼 것이다.
+message LibwebpVersions {
+  // 디코더(libwebp) 버전.
+  string decoder = 1;
+  // 인코더(libwebp) 버전.
+  string encoder = 2;
+  // libwebpdemux 버전.
+  string demux = 3;
+  // libwebpmux 버전.
+  string mux = 4;
+}
+
+// GetFeaturesRequest는 GetFeatures 요청 스트림의 메시지 하나다.
+message GetFeaturesRequest {
+  // 첫 메시지는 options, 이후 메시지는 webp_data다. 순서가 다르면 INVALID_ARGUMENT.
+  oneof payload {
+    // 요청 옵션. 첫 메시지에만 온다.
+    GetFeaturesOptions options = 1;
+    // 압축된 WebP 입력의 다음 조각. 크기는 1바이트 이상 Limits.max_chunk_bytes 이하.
+    bytes webp_data = 2;
+  }
+}
+
+// GetFeaturesOptions는 GetFeatures 요청 옵션이다.
+message GetFeaturesOptions {
+  // 뒤따를 webp_data 조각 바이트의 합계. Limits.max_input_bytes를 넘으면 조각을 받기 전에 RESOURCE_EXHAUSTED.
+  // 실제 합계가 이 값과 다르면 INVALID_ARGUMENT. 단위: 바이트.
+  uint64 input_bytes = 1;
+  // true면 응답에 Metadata를 채운다. ImageIO의 ignoreMetadata가 true이면 false로 보낸다.
+  bool include_metadata = 2;
+}
+
+// GetFeaturesResponse는 이미지 특성과 메타데이터다.
+message GetFeaturesResponse {
+  // 이미지 특성.
+  ImageFeatures features = 1;
+  // 메타데이터. options.include_metadata가 false면 설정하지 않는다.
+  Metadata metadata = 2;
+}
+
+// DecodeRequest는 Decode 요청 스트림의 메시지 하나다.
+message DecodeRequest {
+  // 첫 메시지는 options, 이후 메시지는 webp_data다. 순서가 다르면 INVALID_ARGUMENT.
+  oneof payload {
+    // 요청 옵션. 첫 메시지에만 온다.
+    DecodeOptions options = 1;
+    // 압축된 WebP 입력의 다음 조각. 크기는 1바이트 이상 Limits.max_chunk_bytes 이하.
+    bytes webp_data = 2;
+  }
+}
+
+// DecodeOptions는 Decode 요청 옵션이다.
+message DecodeOptions {
+  // 뒤따를 webp_data 조각 바이트의 합계. 의미와 검증은 GetFeaturesOptions.input_bytes와 같다. 단위: 바이트.
+  uint64 input_bytes = 1;
+  // 디코딩할 프레임 번호(0부터). 애니메이션은 이 프레임까지 합성한 캔버스를 돌려준다.
+  // 정지 이미지는 0만 허용한다. 프레임 수 이상이면 OUT_OF_RANGE.
+  uint32 frame_index = 2;
+  // 원하는 픽셀 포맷. 서버가 지원하지 않으면 INVALID_ARGUMENT.
+  PixelFormat pixel_format = 3;
+  // 클라이언트 쪽 픽셀 수 상한(width × height). 서버는 이 값과 Limits.max_pixels 중 작은 값을 적용한다.
+  // 설정하지 않으면 서버 상한만 적용한다.
+  optional uint64 max_pixels = 4;
+}
+
+// DecodeResponse는 Decode 응답 스트림의 메시지 하나다.
+message DecodeResponse {
+  // 첫 메시지는 header, 이후 메시지는 pixels다.
+  oneof payload {
+    // 디코딩 결과의 배치. 첫 메시지에만 온다.
+    FrameHeader header = 1;
+    // 픽셀의 다음 조각. 위쪽 행부터 차례로 이어 붙이면 header가 선언한 버퍼가 된다.
+    // 조각 경계는 행 경계와 맞지 않을 수 있다.
+    bytes pixels = 2;
+  }
+}
+
+// DecodeAnimationRequest는 DecodeAnimation 요청 스트림의 메시지 하나다.
+message DecodeAnimationRequest {
+  // 첫 메시지는 options, 이후 메시지는 webp_data다. 순서가 다르면 INVALID_ARGUMENT.
+  oneof payload {
+    // 요청 옵션. 첫 메시지에만 온다.
+    DecodeAnimationOptions options = 1;
+    // 압축된 WebP 입력의 다음 조각. 크기는 1바이트 이상 Limits.max_chunk_bytes 이하.
+    bytes webp_data = 2;
+  }
+}
+
+// DecodeAnimationOptions는 DecodeAnimation 요청 옵션이다.
+message DecodeAnimationOptions {
+  // 뒤따를 webp_data 조각 바이트의 합계. 의미와 검증은 GetFeaturesOptions.input_bytes와 같다. 단위: 바이트.
+  uint64 input_bytes = 1;
+  // 원하는 픽셀 포맷. 서버가 지원하지 않으면 INVALID_ARGUMENT.
+  PixelFormat pixel_format = 2;
+  // 클라이언트 쪽 캔버스 픽셀 수 상한. 의미는 DecodeOptions.max_pixels와 같다.
+  optional uint64 max_pixels = 3;
+}
+
+// DecodeAnimationResponse는 DecodeAnimation 응답 스트림의 메시지 하나다.
+message DecodeAnimationResponse {
+  // 순서: features 1개 → (frame → pixels 조각들)이 프레임 수만큼 반복.
+  oneof payload {
+    // 이미지 특성. 첫 메시지에만 온다.
+    ImageFeatures features = 1;
+    // 다음 프레임의 배치. 각 프레임의 픽셀 조각 앞에 한 번 온다.
+    FrameHeader frame = 2;
+    // 현재 프레임 픽셀의 다음 조각. 이어 붙이는 규칙은 DecodeResponse.pixels와 같다.
+    bytes pixels = 3;
+  }
+}
+
+// EncodeRequest는 Encode 요청 스트림의 메시지 하나다.
+message EncodeRequest {
+  // 첫 메시지는 options, 이후 메시지는 pixels다. 순서가 다르면 INVALID_ARGUMENT.
+  oneof payload {
+    // 요청 옵션. 첫 메시지에만 온다.
+    EncodeOptions options = 1;
+    // 입력 픽셀의 다음 조각. 위쪽 행부터 차례로 보낸다. 크기는 1바이트 이상 Limits.max_chunk_bytes 이하.
+    bytes pixels = 2;
+  }
+}
+
+// EncodeParams는 인코더 품질 설정이다. 정지 이미지와 애니메이션이 같이 쓴다.
+// 설정하지 않은 optional 필드는 libwebp 기본값(WebPConfigInit)을 쓴다.
+message EncodeParams {
+  // true면 lossless(VP8L), false면 lossy(VP8)로 인코딩한다.
+  bool lossless = 1;
+  // 품질 0–100. lossy에서는 화질, lossless에서는 압축 노력이다(libwebp WebPConfig.quality). 범위 밖이면 INVALID_ARGUMENT.
+  optional float quality = 2;
+  // 속도와 압축률의 균형 0(빠름)–6(느림, 더 작음)(libwebp WebPConfig.method). 범위 밖이면 INVALID_ARGUMENT.
+  optional uint32 method = 3;
+}
+
+// EncodeOptions는 Encode 요청 옵션이다.
+message EncodeOptions {
+  // 입력 이미지 너비. 1 이상 16383 이하(libwebp WEBP_MAX_DIMENSION). 단위: 픽셀.
+  uint32 width = 1;
+  // 입력 이미지 높이. 1 이상 16383 이하. 단위: 픽셀.
+  uint32 height = 2;
+  // 뒤따를 pixels의 배치. 합계 바이트는 width × height × 4여야 한다.
+  PixelFormat pixel_format = 3;
+  // 인코더 품질 설정.
+  EncodeParams params = 4;
+  // 결과 파일에 넣을 메타데이터. 설정한 필드만 넣는다(VP8X 확장 형식이 된다).
+  Metadata metadata = 5;
+}
+
+// EncodeResponse는 Encode 응답 스트림의 메시지 하나다.
+message EncodeResponse {
+  // 첫 메시지는 header, 이후 메시지는 webp_data다.
+  oneof payload {
+    // 결과 크기. 첫 메시지에만 온다.
+    EncodedHeader header = 1;
+    // 결과 WebP 파일의 다음 조각. 차례로 이어 붙이면 완전한 WebP 파일이 된다.
+    bytes webp_data = 2;
+  }
+}
+
+// EncodeAnimationRequest는 EncodeAnimation 요청 스트림의 메시지 하나다.
+message EncodeAnimationRequest {
+  // 순서: options 1개 → (frame → pixels 조각들)이 1번 이상 반복. 순서가 다르면 INVALID_ARGUMENT.
+  oneof payload {
+    // 요청 옵션. 첫 메시지에만 온다.
+    EncodeAnimationOptions options = 1;
+    // 다음 프레임의 표시 정보. 각 프레임의 픽셀 조각 앞에 한 번 온다.
+    EncodeFrame frame = 2;
+    // 현재 프레임 픽셀의 다음 조각. 프레임마다 합계 canvas_width × canvas_height × 4바이트.
+    bytes pixels = 3;
+  }
+}
+
+// EncodeAnimationOptions는 EncodeAnimation 요청 옵션이다.
+message EncodeAnimationOptions {
+  // 캔버스 너비. 모든 프레임이 이 크기다. 단위: 픽셀.
+  uint32 canvas_width = 1;
+  // 캔버스 높이. 모든 프레임이 이 크기다. 단위: 픽셀.
+  uint32 canvas_height = 2;
+  // 프레임 픽셀의 배치.
+  PixelFormat pixel_format = 3;
+  // 반복 횟수. 0은 무한 반복이다.
+  uint32 loop_count = 4;
+  // 캔버스 배경색, 0xAARRGGBB. 표현은 AnimationInfo.background_color_argb와 같다.
+  uint32 background_color_argb = 5;
+  // 인코더 품질 설정. 모든 프레임에 같이 적용한다.
+  EncodeParams params = 6;
+  // 결과 파일에 넣을 메타데이터.
+  Metadata metadata = 7;
+}
+
+// EncodeFrame은 애니메이션에 넣을 프레임 하나의 표시 정보다.
+message EncodeFrame {
+  // 프레임 표시 시간. 단위: ms.
+  uint32 duration_ms = 1;
+}
+
+// EncodeAnimationResponse는 EncodeAnimation 응답 스트림의 메시지 하나다.
+message EncodeAnimationResponse {
+  // 첫 메시지는 header, 이후 메시지는 webp_data다.
+  oneof payload {
+    // 결과 크기. 첫 메시지에만 온다.
+    EncodedHeader header = 1;
+    // 결과 WebP 파일의 다음 조각. 차례로 이어 붙이면 완전한 WebP 파일이 된다.
+    bytes webp_data = 2;
+  }
+}

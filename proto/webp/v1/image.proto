@@ -1,0 +1,151 @@
+syntax = "proto3";
+
+// webp.v1은 libwebp 사이드카 서버와 클라이언트 사이의 계약이다.
+// 이 파일은 여러 RPC가 함께 쓰는 이미지, 프레임, 메타데이터, 상한 타입을 정의한다.
+// 설명 문서: docs/design/grpc-api.md
+package webp.v1;
+
+// PixelFormat은 압축 해제된 픽셀의 메모리 배치다. ADR-0004.
+enum PixelFormat {
+  // 지정하지 않음. 요청에서는 PIXEL_FORMAT_RGBA8로 해석한다. 서버 응답에는 쓰지 않는다.
+  PIXEL_FORMAT_UNSPECIFIED = 0;
+  // 픽셀당 4바이트, 바이트 순서 R, G, B, A, 비-premultiplied alpha, 색 관리 없음.
+  // 행 패딩이 없다(stride = width × 4바이트). 불투명 픽셀은 A = 255.
+  PIXEL_FORMAT_RGBA8 = 1;
+}
+
+// Compression은 비트스트림의 압축 방식이다. libwebp WebPBitstreamFeatures.format에 대응한다.
+enum Compression {
+  // 알 수 없음. 서버 응답에는 쓰지 않는다.
+  COMPRESSION_UNSPECIFIED = 0;
+  // VP8 비트스트림(lossy). RFC 9649 §2.5.
+  COMPRESSION_LOSSY = 1;
+  // VP8L 비트스트림(lossless). RFC 9649 §2.6, §3.
+  COMPRESSION_LOSSLESS = 2;
+  // 애니메이션에서 프레임마다 lossy와 lossless가 섞여 있다.
+  COMPRESSION_MIXED = 3;
+}
+
+// BlendMethod는 프레임을 캔버스에 합성하는 방법이다. RFC 9649 §2.7.1.1.
+enum BlendMethod {
+  // 알 수 없음. 서버 응답에는 쓰지 않는다.
+  BLEND_METHOD_UNSPECIFIED = 0;
+  // 프레임의 alpha로 기존 캔버스 위에 섞는다.
+  BLEND_METHOD_ALPHA_BLEND = 1;
+  // 섞지 않고 프레임 사각형을 덮어쓴다.
+  BLEND_METHOD_NO_BLEND = 2;
+}
+
+// DisposeMethod는 프레임 표시가 끝난 뒤 그 사각형을 처리하는 방법이다. RFC 9649 §2.7.1.1.
+enum DisposeMethod {
+  // 알 수 없음. 서버 응답에는 쓰지 않는다.
+  DISPOSE_METHOD_UNSPECIFIED = 0;
+  // 그대로 둔다.
+  DISPOSE_METHOD_NONE = 1;
+  // 프레임 사각형을 배경색으로 지운다.
+  DISPOSE_METHOD_BACKGROUND = 2;
+}
+
+// Metadata는 WebP 컨테이너의 메타데이터 청크 페이로드다. RFC 9649 §2.7.1.4(ICCP), §2.7.1.5(EXIF, XMP).
+// 서버는 내용을 해석하거나 정규화하지 않고 청크 페이로드 원본 바이트를 그대로 전달한다.
+// 세 필드 크기의 합은 Limits.max_metadata_bytes 이하여야 한다.
+message Metadata {
+  // ICCP 청크 페이로드(ICC 프로파일). 청크가 없으면 설정하지 않는다.
+  optional bytes icc_profile = 1;
+  // EXIF 청크 페이로드. 청크가 없으면 설정하지 않는다.
+  // 일부 인코더가 넣는 "Exif\0\0" 접두어도 입력 그대로 둔다.
+  optional bytes exif = 2;
+  // XMP 청크 페이로드(UTF-8 XML). 청크가 없으면 설정하지 않는다.
+  optional bytes xmp = 3;
+}
+
+// FrameInfo는 애니메이션 프레임 하나의 ANMF 정보다. RFC 9649 §2.7.1.1.
+// 좌표와 크기의 단위는 캔버스 기준 픽셀이다.
+message FrameInfo {
+  // 캔버스 안에서 프레임 사각형의 왼쪽 x 좌표. 단위: 픽셀.
+  uint32 x_offset = 1;
+  // 캔버스 안에서 프레임 사각형의 위쪽 y 좌표. 단위: 픽셀.
+  uint32 y_offset = 2;
+  // 프레임 사각형의 너비. 단위: 픽셀.
+  uint32 width = 3;
+  // 프레임 사각형의 높이. 단위: 픽셀.
+  uint32 height = 4;
+  // 프레임 표시 시간. 단위: ms.
+  uint32 duration_ms = 5;
+  // 합성 방법.
+  BlendMethod blend = 6;
+  // 표시 후 처리 방법.
+  DisposeMethod dispose = 7;
+  // 이 프레임 비트스트림에 alpha가 있으면 true.
+  bool has_alpha = 8;
+  // 이 프레임의 압축 방식. COMPRESSION_MIXED는 쓰지 않는다.
+  Compression compression = 9;
+}
+
+// AnimationInfo는 애니메이션 전체 정보(ANIM 청크)와 프레임 목록이다. RFC 9649 §2.7.1.1.
+message AnimationInfo {
+  // 반복 횟수. 0은 무한 반복이다.
+  uint32 loop_count = 1;
+  // 캔버스 배경색, 0xAARRGGBB.
+  // 서버는 libwebp의 bgcolor(비트 0–7 A, 8–15 R, 16–23 G, 24–31 B)를 이 순서로 바꿔 넣는다.
+  uint32 background_color_argb = 2;
+  // 프레임별 정보. 길이는 ImageFeatures.frame_count와 같고 순서는 표시 순서다.
+  repeated FrameInfo frames = 3;
+}
+
+// ImageFeatures는 픽셀을 디코딩하지 않고 알 수 있는 이미지 특성이다.
+message ImageFeatures {
+  // 캔버스 너비. 정지 이미지는 이미지 너비다. 단위: 픽셀.
+  uint32 width = 1;
+  // 캔버스 높이. 정지 이미지는 이미지 높이다. 단위: 픽셀.
+  uint32 height = 2;
+  // 이미지(애니메이션은 어느 프레임이든)에 alpha가 있으면 true.
+  bool has_alpha = 3;
+  // 애니메이션이면 true.
+  bool has_animation = 4;
+  // 압축 방식. 애니메이션에서 프레임마다 다르면 COMPRESSION_MIXED.
+  Compression compression = 5;
+  // 프레임 수. 정지 이미지는 1이다.
+  uint32 frame_count = 6;
+  // 애니메이션 정보. has_animation이 true일 때만 설정한다.
+  AnimationInfo animation = 7;
+}
+
+// FrameHeader는 뒤따르는 픽셀 조각들의 배치를 알린다.
+// 클라이언트는 픽셀 버퍼를 할당하기 전에 이 값으로 자신의 상한을 검증한다.
+message FrameHeader {
+  // 0부터 시작하는 프레임 번호. 정지 이미지는 0이다.
+  uint32 frame_index = 1;
+  // 픽셀 너비. 애니메이션은 합성된 캔버스 너비다. 단위: 픽셀.
+  uint32 width = 2;
+  // 픽셀 높이. 애니메이션은 합성된 캔버스 높이다. 단위: 픽셀.
+  uint32 height = 3;
+  // 뒤따르는 픽셀의 배치.
+  PixelFormat pixel_format = 4;
+  // 뒤따르는 픽셀 조각 바이트의 합계. PIXEL_FORMAT_RGBA8이면 항상 width × height × 4다.
+  uint64 pixel_bytes = 5;
+  // 픽셀에 의미 있는 alpha가 있으면 true. false면 모든 A가 255다.
+  bool has_alpha = 6;
+  // 프레임 표시 시간. 정지 이미지는 0이다. 단위: ms.
+  uint32 duration_ms = 7;
+}
+
+// EncodedHeader는 뒤따르는 인코딩 결과(WebP 파일) 조각들의 크기를 알린다.
+message EncodedHeader {
+  // 뒤따르는 WebP 바이트 조각의 합계. 단위: 바이트.
+  uint64 webp_bytes = 1;
+}
+
+// Limits는 서버가 적용하는 상한이다. 요청이 상한을 넘으면 서버는 작업 전에 RESOURCE_EXHAUSTED로 거부한다.
+message Limits {
+  // 압축된 WebP 입력의 최대 크기. 단위: 바이트.
+  uint64 max_input_bytes = 1;
+  // 캔버스 하나의 최대 픽셀 수(width × height). 디코딩은 헤더만 읽고 이 값과 비교한다.
+  uint64 max_pixels = 2;
+  // 애니메이션의 최대 프레임 수.
+  uint32 max_frames = 3;
+  // Metadata 세 필드 크기 합의 최대값. 단위: 바이트.
+  uint64 max_metadata_bytes = 4;
+  // 데이터 조각(bytes 필드) 하나의 최대 크기. 서버는 이 크기 이하로 보내고, 이를 넘는 조각을 받으면 거부한다. 단위: 바이트.
+  uint32 max_chunk_bytes = 5;
+}
