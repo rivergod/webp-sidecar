@@ -1,8 +1,8 @@
 # 0003. 전송: UDS 기본 + TCP 옵션, 1 MiB 청크 스트리밍
 
-- 상태: proposed
+- 상태: accepted
 - 날짜: 2026-10-23
-- 결정자: -
+- 결정자: Ilkang Na
 - 관련 문서: [ADR-0001](0001-isolate-libwebp-in-grpc-sidecar.md), [ADR-0004](0004-pixel-transfer-format.md), [docs/design/grpc-api.md](../design/grpc-api.md), [docs/research/0004-jdk-baseline.md](../research/0004-jdk-baseline.md) "UDS 지원 경로", [docs/research/0003-server-language-rust-vs-go.md](../research/0003-server-language-rust-vs-go.md) "gRPC 스택"
 
 ## 맥락
@@ -42,19 +42,19 @@
 
 ## 결정
 
-**T1 + D1을 추천한다.**
+**T1 + D1을 택한다.**
 
 전송:
 
 - 서버는 UDS 경로(설정 가능)에서 리슨한다. TCP 리슨은 옵션이고, 켜면 기본 바인드 주소는 `127.0.0.1`이다. 인증과 TLS는 이 프로토타입의 비목표다.
 - 클라이언트 기본 엔드포인트는 `unix:///run/webp-imageio/webp.sock`이다(설정 해석은 [grpc-api.md §5](../design/grpc-api.md)).
-- **Java 클라이언트의 UDS는 JNI 없는 경로로만 구현한다**: JDK `UnixDomainSocketAddress` + Netty `NioDomainSocketChannel`. 비셰이드 `grpc-netty`를 native transport 없이 쓰거나 Netty native 로드를 끈다. 이 경로는 JDK 16+가 필요하다(ADR-0005의 17 기준선과 맞물린다).
-- **Phase 2 첫 작업으로 이 경로의 PoC를 한다.** grpc-java에서 동작하지 않으면 다음 중 하나를 고르는 새 ADR을 쓴다: (a) TCP 루프백을 기본으로 바꾼다. (b) Netty native epoll(JNI)을 허용하고 그 범위를 문서화한다.
+- **Java 클라이언트의 UDS는 JNI 없는 경로를 우선한다**: JDK `UnixDomainSocketAddress` + Netty `NioDomainSocketChannel`. 비셰이드 `grpc-netty`를 native transport 없이 쓰거나 Netty native 로드를 끈다. 이 경로는 JDK 16+가 필요하다(ADR-0005의 17 기준선과 맞물린다).
+- **Phase 2 첫 작업으로 PoC를 한다.** JNI 없는 경로와 grpc-java 공식 경로(`unix:` target + Netty native epoll)를 **모두 테스트**해 동작 여부와 처리량을 비교한다(결정자 지시, 2026-10-23). JNI 없는 경로가 grpc-java에서 동작하지 않으면 다음 중 하나를 고르는 새 ADR을 쓴다: (a) TCP 루프백을 기본으로 바꾼다. (b) Netty native epoll(JNI)을 허용하고 그 범위를 문서화한다.
 - Windows 개발 환경과 크로스 플랫폼 통합 테스트는 TCP를 쓴다. UDS 통합 테스트는 Linux에서 실행한다.
 
 큰 데이터:
 
-- 압축 WebP 바이트와 픽셀 모두 `Limits.max_chunk_bytes` 이하의 조각으로 스트리밍한다. 초기값은 **1 MiB**다. gRPC 기본 한도(4MB)에 충분한 여유를 두면서 메시지 수를 적게 유지하는 출발점이다. Phase 4에서 256 KiB~2 MiB 범위를 측정해 조정한다.
+- 압축 WebP 바이트와 픽셀 모두 `Limits.max_chunk_bytes` 이하의 조각으로 스트리밍한다. 기본값은 **1 MiB**이고 서버 설정값으로 바꿀 수 있다([grpc-api.md §3](../design/grpc-api.md)). gRPC 기본 한도(4MB)에 충분한 여유를 두면서 메시지 수를 적게 유지하는 출발점이다. Phase 4에서 256 KiB~2 MiB 범위를 측정해 조정한다.
 - 어떤 메시지도 기본 한도를 넘지 않게 해서, 클라이언트·서버 어느 쪽도 최대 메시지 크기를 바꾸지 않는다. 한 메시지로 가는 메타데이터(`GetFeaturesResponse`)는 `max_metadata_bytes`로 제한한다.
 - 메시지 순서 규칙은 [grpc-api.md §2](../design/grpc-api.md)를 따른다.
 
@@ -70,13 +70,13 @@
 
 ### 확인 방법
 
-- Phase 2: JNI 없는 UDS PoC. JDK 24+에서 `--illegal-native-access=deny`로 실행해도 동작하면 "JNI 없음"이 성립한다.
+- Phase 2: UDS PoC. JNI 없는 경로는 JDK 24+에서 `--illegal-native-access=deny`로 실행해도 동작하면 "JNI 없음"이 성립한다. 공식 epoll 경로와 동작·처리량을 비교해 기록한다.
 - Phase 2: Linux에서 UDS, 모든 플랫폼에서 TCP 통합 테스트 통과.
 - Phase 4: UDS vs TCP, 청크 크기별 처리량을 측정해 이 ADR의 초기값을 재검토한다.
 
 ## 선택지별 장단점
 
-### T1. UDS 기본 + TCP 옵션 (추천)
+### T1. UDS 기본 + TCP 옵션 (채택)
 
 - 장점: 네트워크 없는 서버 컨테이너가 가능하다. 성능 이점. 개발·테스트용 TCP 탈출구가 있다.
 - 단점: Java 쪽 JNI 없는 UDS가 미확인. 전송이 두 개라 테스트가 두 배.
@@ -92,7 +92,7 @@
 - 장점: 가장 단순하고 격리가 가장 강하다.
 - 단점: Windows 개발과 크로스 플랫폼 통합 테스트가 막힌다.
 
-### D1. 청크 스트리밍 (추천)
+### D1. 청크 스트리밍 (채택)
 
 - 장점: 크기와 무관하게 같은 경로. 메모리가 조각 단위로 제한된다. 한도 설정이 필요 없다.
 - 단점: 스트리밍 구현 복잡도.

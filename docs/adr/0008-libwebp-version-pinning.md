@@ -1,8 +1,8 @@
 # 0008. libwebp 버전 고정: 최신 릴리스 태그(v1.6.0)를 쓰고 main의 미릴리스 수정을 추적한다
 
-- 상태: proposed
+- 상태: accepted
 - 날짜: 2026-10-23
-- 결정자: -
+- 결정자: Ilkang Na
 - 관련 문서: [docs/research/0003-server-language-rust-vs-go.md](../research/0003-server-language-rust-vs-go.md) "libwebp 최신 안정판", [ADR-0002](0002-server-language.md)
 
 ## 맥락
@@ -16,7 +16,7 @@
   - `ace1fa52` row × stride 포인터 오프셋 32비트 overflow (dec/enc/dsp)
   - `44b94d53`, `652631be` anim_encode 오류 경로 double-free (인코딩 경로)
   - `6391cf3f` `WebPMuxSetCanvasSize` signed overflow (mux)
-- `libwebp-sys`(ADR-0002의 Rust 추천안)는 v1.6.0 태그를 벤더링한다. 커밋을 고정하려면 포크하거나 자체 `-sys`가 필요하다.
+- `libwebp-sys`(ADR-0002에서 택한 Rust 바인딩)는 v1.6.0 태그를 벤더링한다. 커밋을 고정하려면 포크하거나 자체 `-sys`가 필요하다.
 - 1.3.2 이후 libwebp 자체에 배정된 CVE는 NVD에서 찾지 못했다.
 
 ## 결정 동인
@@ -34,7 +34,7 @@
 
 ## 결정
 
-**프로토타입 단계에서는 선택지 1을 추천한다.**
+**프로토타입 단계에서는 선택지 1을 택한다.**
 
 - 서버는 v1.6.0(태그 커밋 `4fa21912338357f89e4fd51cf2368325b59e9bd9`, tarball sha256 `e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564`)으로 빌드한다.
 - 위 미릴리스 수정 목록을 research/0003에 유지하고, 새 릴리스가 나오면 올린다.
@@ -54,7 +54,7 @@
 
 ## 선택지별 장단점
 
-### 1. 릴리스 태그 고정 (추천)
+### 1. 릴리스 태그 고정 (채택)
 
 - 장점: 단순, 버전 명확, `libwebp-sys` 그대로 사용.
 - 단점: 미릴리스 수정 누락.

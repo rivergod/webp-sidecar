@@ -1,8 +1,8 @@
 # 0004. 픽셀 전송 포맷: RGBA8 비-premultiplied, 행 패딩 없음
 
-- 상태: proposed
+- 상태: accepted
 - 날짜: 2026-10-23
-- 결정자: -
+- 결정자: Ilkang Na
 - 관련 문서: [ADR-0003](0003-transport.md), [docs/design/grpc-api.md](../design/grpc-api.md)
 
 ## 맥락
@@ -38,7 +38,7 @@ JVM 쪽에서 많이 쓰는 `BufferedImage` 타입은 `TYPE_INT_ARGB`(int 하나
 
 ## 결정
 
-**선택지 1을 추천한다.** 와이어 포맷은 RGBA8(채널당 8비트, 바이트 순서 R,G,B,A), 비-premultiplied, sRGB 값 그대로(색 관리는 하지 않음), 행 패딩 없음(stride = width × 4)으로 고정한다.
+**선택지 1을 택한다.** 와이어 포맷은 RGBA8(채널당 8비트, 바이트 순서 R,G,B,A), 비-premultiplied, sRGB 값 그대로(색 관리는 하지 않음), 행 패딩 없음(stride = width × 4)으로 고정한다.
 
 - proto에는 `PixelFormat` enum을 두되 v1에서는 `PIXEL_FORMAT_RGBA8`만 정의한다. 다른 포맷이 필요해지면 enum 값을 추가해도 기존 클라이언트가 깨지지 않는다.
 - stride 필드는 두지 않는다. 바이트 수는 항상 `width × height × 4`이고, 양쪽이 이 값으로 응답 크기를 검증한다.

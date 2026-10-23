@@ -1,8 +1,8 @@
 # 0005. 클라이언트: JDK 17 기준(`--release 17`), Java, Gradle
 
-- 상태: proposed
+- 상태: accepted
 - 날짜: 2026-10-23
-- 결정자: -
+- 결정자: Ilkang Na
 - 관련 문서: [docs/research/0004-jdk-baseline.md](../research/0004-jdk-baseline.md), [ADR-0003](0003-transport.md)
 
 ## 맥락
@@ -37,7 +37,7 @@
 
 ## 결정
 
-**JDK 17(`--release 17`), Java, Gradle(Kotlin DSL)을 추천한다.** Gradle 추천은 약하다(아래 Maven 대안 참고).
+**JDK 17(`--release 17`), Java, Gradle(Kotlin DSL)을 택한다.** Maven은 검토한 대안으로 남긴다(Gradle JMH 플러그인 문제가 생기면 다시 본다).
 
 - 컴파일은 `--release 17`로 하고, 빌드는 JDK 25 toolchain으로 한다. 테스트는 17 / 21 / 25 / 27에서 돌린다(toolchain 매트릭스).
 - SPI는 classpath용 `META-INF/services`와 module path용 `module-info`의 `provides`를 둘 다 둔다.

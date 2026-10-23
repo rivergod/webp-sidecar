@@ -1,8 +1,8 @@
 # 0006. 테스트 샘플: 자체 생성 세트를 커밋하고, 외부 세트는 고정 커밋으로 받는다
 
-- 상태: proposed
+- 상태: accepted
 - 날짜: 2026-10-23
-- 결정자: -
+- 결정자: Ilkang Na
 - 관련 문서: [docs/research/0005-test-samples.md](../research/0005-test-samples.md), [docs/conventions/testing.md](../conventions/testing.md), [ADR-0004](0004-pixel-transfer-format.md)
 
 ## 맥락
@@ -33,7 +33,7 @@
 
 ## 결정
 
-**선택지 1을 추천한다.**
+**선택지 1을 택한다.**
 
 ```
 samples/
@@ -73,7 +73,7 @@ samples/
 
 ## 선택지별 장단점
 
-### 1. 자체 생성 커밋 + 외부 고정 다운로드 (추천)
+### 1. 자체 생성 커밋 + 외부 고정 다운로드 (채택)
 
 - 장점: 커버리지, 라이선스, 크기의 균형.
 - 단점: 스크립트와 manifest 유지.

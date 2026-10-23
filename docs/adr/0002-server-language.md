@@ -1,8 +1,8 @@
 # 0002. 서버 구현 언어: Rust (tonic + libwebp-sys)
 
-- 상태: proposed
+- 상태: accepted
 - 날짜: 2026-10-23
-- 결정자: -
+- 결정자: Ilkang Na
 - 관련 문서: [docs/research/0003-server-language-rust-vs-go.md](../research/0003-server-language-rust-vs-go.md), [spikes/README.md](../../spikes/README.md), [ADR-0008](0008-libwebp-version-pinning.md)
 
 ## 맥락
@@ -42,9 +42,9 @@
 
 ## 결정
 
-**선택지 1(Rust)을 추천한다. 단, 팀 친숙도 확인 결과가 이를 뒤집지 않는다는 조건에서다.** 아래 질문의 답이 "Rust 유지보수 인력이 없다"이면 선택지 2(Go)를 추천한다. Go도 스파이크로 실현 가능성이 확인됐다.
+**선택지 1(Rust)을 택한다.** 결정자가 2026-10-23에 Rust로 결정했다. 아래 팀 친숙도 질문에 대한 개별 답은 기록되지 않았다.
 
-사람에게 확인할 질문:
+결정 전에 제시한 질문(참고로 남긴다):
 
 1. 서버를 유지보수할 사람의 Rust / Go 실무 경험은 어느 정도인가?
 2. unsafe Rust 또는 cgo 래퍼(메모리·수명 규칙)를 작성·리뷰할 수 있는 사람이 있는가?
@@ -53,7 +53,7 @@
 5. tonic 또는 grpc-go를 운영해 본 경험이 있는가?
 6. 의존성 정책상 0.x 크레이트(tonic)나 소유자 1명인 크레이트(`libwebp-sys`)를 허용하는가? 필요하면 포크를 유지할 의향이 있는가?
 
-Rust를 택할 때의 구현 조건:
+구현 조건:
 
 - libwebp 호출은 서버 안의 작은 모듈 하나에 모으고, 그 모듈만 `unsafe`를 쓴다. C enum 반환값은 Rust enum이 아니라 정수로 받는다(`libwebp-sys`가 생성한 Rust enum에 예상 밖 값이 들어오면 UB).
 - `libwebp-sys`가 감싸지 않은 inline 헬퍼(`WebPMuxCreate`, `WebPDemux`, `WebPAnimEncoderNew` 등)는 `*Internal` 함수 + ABI 상수로 호출하고, 그 이유를 주석으로 남긴다.
@@ -71,13 +71,12 @@ Rust를 택할 때의 구현 조건:
 
 ### 확인 방법
 
-- 위 6개 질문에 대한 사람의 답을 [research/0003 8절](../research/0003-server-language-rust-vs-go.md)에 기록한다.
 - Phase 1 완료 기준(서버 단위 테스트, 상한 검사, Docker 하드닝 실행)을 이 언어로 통과한다.
 - Phase 5에서 퍼저가 libwebp 호출 경로까지 계측되는지 확인한다(현재는 추정).
 
 ## 선택지별 장단점
 
-### 1. Rust + libwebp-sys (추천)
+### 1. Rust + libwebp-sys (채택)
 
 - 장점: 바인딩 성숙도, 메모리 모델, 이미지 크기, 시스템 콜 표면, 퍼징 계측.
 - 단점: tonic 0.x, `libwebp-sys` 단일 소유자, 일부 inline 헬퍼 직접 호출, SIMD 기본 설정.
