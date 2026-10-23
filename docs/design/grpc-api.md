@@ -81,7 +81,7 @@ sequenceDiagram
 - **상한은 서버 설정값이다**(결정 2026-10-23). 코드에 고정하지 않고 서버가 시작할 때 설정에서 읽어 적용하며, `GetInfo`의 `Limits`로 그대로 노출한다. 설정 키는 §3.1, 기본값은 [ADR-0012](../adr/0012-server-runtime-config.md).
 - 서버는 시작할 때 설정값을 검사한다. `max_chunk_bytes`와 `max_metadata_bytes`는 메시지 하나에 실리므로 gRPC 기본 메시지 한도(4MB)보다 작아야 한다(ADR-0003의 불변식). 어기면 시작하지 않는다.
 - 픽셀 수 상한이 필요한 근거: VP8X 캔버스만 16384×16384로 바꾼 298바이트짜리 유효한 애니메이션 파일 하나로 디코더가 1GiB 할당을 시도한다([research/0005](../research/0005-test-samples.md) "손상/악성 입력").
-- **기본값은 근거 없는 출발점이다.** Phase 1에서 컨테이너 메모리 제한과 함께 기본값을 정하고 근거를 이 표에 적는다.
+- **기본값 근거(측정 2026-10-23, [research/0007](../research/0007-server-memory-budget.md))**: 컨테이너 1 GiB·동시 처리 2에서 8192² 정지 이미지 디코딩 두 개를 동시에 처리해도 최고 661 MiB로 안에 든다. 인코딩은 libwebp 인코더가 픽셀당 약 31–36 B를 써서 8192² 하나로도 OOM이다. 기본값 조정안(메모리 예산 기반 허용)은 [ADR-0016](../adr/0016-memory-budget-admission.md)(proposed).
 - 클라이언트는 `DecodeOptions.max_pixels`로 더 엄격한 상한을 보낼 수 있다. 서버는 둘 중 작은 값을 적용한다.
 - 클라이언트도 응답 `FrameHeader`를 받으면 할당 전에 다시 검증한다. Java 배열 한도(약 2^31 원소) 때문에 RGBA8 `byte[]` 하나로는 약 5.3억 픽셀을 넘을 수 없다. libwebp 최대 크기(16383 × 16383 ≈ 2.7억 픽셀)는 그 안에 든다.
 - 정지 이미지는 `WebPGetFeatures`로, 애니메이션은 `WebPDemux`의 캔버스 크기와 프레임 수로 검사한다.
