@@ -38,7 +38,8 @@
 - [ ] lossy 인코딩 왕복이 이름 붙은 PSNR 임계값 이상이다(측정 근거를 상수 주석에 기록).
 - [ ] 4MB를 넘는 이미지(예: 3840×2160)가 청크 스트리밍으로 디코딩·인코딩된다.
 - [ ] 손상/악성 입력(잘림, 크기 필드 조작, 거대 크기 선언)이 `INVALID_ARGUMENT` 또는 `RESOURCE_EXHAUSTED`로 거부되고 서버는 계속 응답한다.
-- [ ] 상한을 서버 설정값으로 받는다(코드에 고정하지 않는다). 설정 방식과 키 이름, 기본값과 그 근거를 [grpc-api.md §3](design/grpc-api.md)에 적는다.
+- [ ] 상한과 소켓 설정을 [ADR-0012](adr/0012-server-runtime-config.md)의 방식(명령줄 인자 + 환경변수, 키는 [grpc-api.md §3.1](design/grpc-api.md))으로 받는다. 코드에 고정하지 않는다. 기본값의 근거를 grpc-api.md §3에 적는다.
+- [ ] 기본값 조합(메모리 1 GiB, CPU 2, 동시 2)에서 상한 직전 크기의 정지 이미지·애니메이션 디코딩과 인코딩을 동시에 돌려도 OOM이 나지 않는다. 나면 기본값 조정을 새 ADR로 제안한다(ADR-0012의 메모리 예산 위험).
 - [ ] `grpc.health.v1.Health/Check`가 `SERVING`을 돌려준다.
 - [ ] Docker 이미지가 non-root, read-only 루트 파일시스템, 외부 네트워크 없음으로 실행되고, 공유 볼륨의 UDS로 호출된다.
 - [ ] 서버 단위 테스트와 문서 주석 린터가 통과하고, 그 명령이 `AGENTS.md`에 적혀 있다.
@@ -64,10 +65,10 @@
 완료 기준:
 
 - [ ] `getNumImages(true)`가 프레임 수를, `read(i)`가 합성된 i번째 프레임을 돌려준다. 결과가 libwebp `WebPAnimDecoder` 기준 출력과 일치한다.
-- [ ] 순차 읽기 정책(`DecodeAnimation` 사용 방식)을 정하고 문서화한다([grpc-api.md §2.4](design/grpc-api.md)).
+- [ ] [ADR-0014](adr/0014-animation-and-metadata-mapping.md)의 순차 읽기 정책을 구현한다. `read(0..n-1)` 순차 읽기에서 `DecodeAnimation`이 한 번만 호출된다.
 - [ ] 시퀀스 쓰기(`writeToSequence`)로 만든 애니메이션을 다시 읽으면 프레임 픽셀(lossless), 표시 시간, 반복 횟수가 일치한다.
 - [ ] ICC/EXIF/XMP 읽기·쓰기 왕복에서 페이로드 바이트가 일치한다.
-- [ ] `IIOMetadata` 표준 포맷(`javax_imageio_1.0`)이 TwelveMonkeys와 같은 노드를 내고, ICC/EXIF/XMP·애니메이션 정보를 담는 native 포맷을 정의해 문서화한다(TwelveMonkeys에는 native 포맷이 없다 — [research/0001](research/0001-java-webp-landscape.md)).
+- [ ] `IIOMetadata` 표준 포맷(`javax_imageio_1.0`)이 TwelveMonkeys와 같은 노드를 낸다. native 포맷 `net_rivergod_webp_imageio_1.0`([ADR-0014](adr/0014-animation-and-metadata-mapping.md))의 노드 구조를 설계 문서로 정하고 구현한다(TwelveMonkeys에는 native 포맷이 없다 — [research/0001](research/0001-java-webp-landscape.md)).
 - [ ] 애니메이션 악성 입력(프레임 수 초과, 캔버스 밖 프레임) 테스트가 통과한다.
 
 ## Phase 4: JMH 벤치마크 + 결과 보고서
@@ -75,8 +76,9 @@
 완료 기준:
 
 - [ ] 같은 샘플로 이 플러그인(UDS, TCP), TwelveMonkeys, darkxanter, libwebp Wasm + Chicory(ADR-0001의 경쟁 대안)를 비교한다.
-- [ ] JDeli 트라이얼을 받을 수 있으면 비교에 포함한다. 트라이얼은 업무용 이메일 등록이 필요하고 평가(비운영) 용도로만 쓸 수 있으며, 만료일이 있다. 결과를 저장소 밖에 공개하기 전에 트라이얼 라이선스 파일에서 벤치마크 공개 조건을 확인한다(공개 자료로는 미확인).
-- [ ] 결과를 [ADR-0011](adr/0011-hypothesis-criteria.md)의 기준(1024×768 이상 디코딩에서 TwelveMonkeys의 3배 이상, JNI의 50% 이상)으로 판정한다.
+- [ ] 결정자가 JDeli 트라이얼을 확보해 요청하면 비교에 포함한다. 트라이얼은 업무용 이메일 등록이 필요하고 평가(비운영) 용도로만 쓸 수 있으며, 만료일이 있다. 결과를 저장소 밖에 공개하기 전에 트라이얼 라이선스 파일에서 벤치마크 공개 조건을 확인한다(공개 자료로는 미확인).
+- [ ] 측정 조건은 [ADR-0015](adr/0015-benchmark-method.md)를 따른다(JMH 설정, 서버 컨테이너 제한, 기본 SIMD 빌드와 AVX2 빌드 모두 측정).
+- [ ] 결과를 기본 SIMD 빌드 기준으로 [ADR-0011](adr/0011-hypothesis-criteria.md)의 기준(1024×768 이상 디코딩에서 TwelveMonkeys의 3배 이상, JNI의 50% 이상)으로 판정한다.
 - [ ] libwebp를 Wasm으로 빌드해 Chicory로 실행하는 비교 구현을 `bench/`에 둔다(벤치 전용, 제품 코드 아님). 사용한 libwebp 버전과 Wasm 빌드 옵션(SIMD, 스레드)을 기록한다.
 - [ ] 이미지 크기별(작음/중간/4K 이상), 종류별(lossy/lossless/alpha/애니메이션)로 측정한다.
 - [ ] 벤치마크를 한 명령으로 재현할 수 있고, 환경(CPU, OS, JDK, libwebp 버전, JMH 설정)이 결과와 함께 기록된다.

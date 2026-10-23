@@ -66,7 +66,7 @@ sequenceDiagram
 - `getNumImages(true)`는 `GetFeatures`의 `frame_count`를 쓴다.
 - `read(i)`는 `Decode(frame_index = i)`를 쓴다. 서버는 0번부터 i번까지 합성한다(`WebPAnimDecoder`는 순차 합성만 지원). 그래서 `read(0)`, `read(1)`, … 를 차례로 부르면 총 비용이 O(n²)이다.
 - 합성 결과는 libwebp `WebPAnimDecoder` 동작을 따른다. libwebp는 ANIM 배경색을 무시하고 캔버스를 투명으로 초기화한다([research/0005](../research/0005-test-samples.md)). 배경색은 `AnimationInfo.background_color_argb`로 따로 알린다.
-- 순차 읽기 효율을 위해 `DecodeAnimation`을 둔다. 리더가 스트림 하나를 열어 두고 `read(i)`가 직전 인덱스 + 1이면 그 스트림에서 다음 프레임을 꺼내는 방식이 후보다. 구체적인 정책(언제 스트림을 열고 닫는가)은 Phase 3에서 정한다.
+- 순차 읽기 효율을 위해 `DecodeAnimation`을 둔다. 정책은 [ADR-0014](../adr/0014-animation-and-metadata-mapping.md)를 따른다: 리더가 입력 하나에 스트림 하나를 열어 두고, `read(i)`가 바로 앞 프레임 + 1이면 그 스트림에서 다음 프레임을 받고, 그 밖에는 스트림을 취소하고 `Decode(frame_index = i)`를 쓴다. 열어 둔 스트림은 서버 동시 처리 슬롯을 차지하므로 `setInput`/`reset`/`dispose`에서 바로 취소한다.
 
 ## 3. 상한과 decompression bomb 방어
 
@@ -78,13 +78,33 @@ sequenceDiagram
 | `max_metadata_bytes` | ICC+EXIF+XMP 합 | demux 직후, `options` 수신 즉시(인코딩) | 2 MiB |
 | `max_chunk_bytes` | 조각 하나 크기 | 조각 수신마다 | 1 MiB (ADR-0003) |
 
-- **상한은 서버 설정값이다**(결정 2026-10-23). 코드에 고정하지 않고 서버가 시작할 때 설정에서 읽어 적용하며, `GetInfo`의 `Limits`로 그대로 노출한다. 설정 방식(환경변수, 명령줄 인자, 설정 파일)과 키 이름은 Phase 1에서 정한다.
+- **상한은 서버 설정값이다**(결정 2026-10-23). 코드에 고정하지 않고 서버가 시작할 때 설정에서 읽어 적용하며, `GetInfo`의 `Limits`로 그대로 노출한다. 설정 키는 §3.1, 기본값은 [ADR-0012](../adr/0012-server-runtime-config.md).
 - 서버는 시작할 때 설정값을 검사한다. `max_chunk_bytes`와 `max_metadata_bytes`는 메시지 하나에 실리므로 gRPC 기본 메시지 한도(4MB)보다 작아야 한다(ADR-0003의 불변식). 어기면 시작하지 않는다.
 - 픽셀 수 상한이 필요한 근거: VP8X 캔버스만 16384×16384로 바꾼 298바이트짜리 유효한 애니메이션 파일 하나로 디코더가 1GiB 할당을 시도한다([research/0005](../research/0005-test-samples.md) "손상/악성 입력").
 - **기본값은 근거 없는 출발점이다.** Phase 1에서 컨테이너 메모리 제한과 함께 기본값을 정하고 근거를 이 표에 적는다.
 - 클라이언트는 `DecodeOptions.max_pixels`로 더 엄격한 상한을 보낼 수 있다. 서버는 둘 중 작은 값을 적용한다.
 - 클라이언트도 응답 `FrameHeader`를 받으면 할당 전에 다시 검증한다. Java 배열 한도(약 2^31 원소) 때문에 RGBA8 `byte[]` 하나로는 약 5.3억 픽셀을 넘을 수 없다. libwebp 최대 크기(16383 × 16383 ≈ 2.7억 픽셀)는 그 안에 든다.
 - 정지 이미지는 `WebPGetFeatures`로, 애니메이션은 `WebPDemux`의 캔버스 크기와 프레임 수로 검사한다.
+
+### 3.1 서버 설정 키
+
+설정 방식은 [ADR-0012](../adr/0012-server-runtime-config.md)를 따른다: 명령줄 인자와 환경변수로 같은 키를 받고, 우선순위는 명령줄 인자 → 환경변수 → 기본값이다. 키 이름은 Phase 1 구현에서 바뀔 수 있으며, 바뀌면 이 표를 함께 고친다.
+
+| 명령줄 인자 | 환경변수 | 기본값 | 의미 |
+|---|---|---|---|
+| `--uds-path` | `WEBP_SERVER_UDS_PATH` | `/run/webp-imageio/webp.sock` | UDS 리슨 경로 |
+| `--uds-mode` | `WEBP_SERVER_UDS_MODE` | `0660` | 소켓 파일 모드 |
+| `--tcp-addr` | `WEBP_SERVER_TCP_ADDR` | 없음(TCP 꺼짐) | TCP 리슨 주소. 권장 `127.0.0.1:50051` |
+| `--max-input-bytes` | `WEBP_SERVER_MAX_INPUT_BYTES` | `67108864` (64 MiB) | `Limits.max_input_bytes` |
+| `--max-pixels` | `WEBP_SERVER_MAX_PIXELS` | `67108864` (8192²) | `Limits.max_pixels` |
+| `--max-frames` | `WEBP_SERVER_MAX_FRAMES` | `1000` | `Limits.max_frames` |
+| `--max-metadata-bytes` | `WEBP_SERVER_MAX_METADATA_BYTES` | `2097152` (2 MiB) | `Limits.max_metadata_bytes` |
+| `--max-chunk-bytes` | `WEBP_SERVER_MAX_CHUNK_BYTES` | `1048576` (1 MiB) | `Limits.max_chunk_bytes` |
+| `--max-concurrency` | `WEBP_SERVER_MAX_CONCURRENCY` | `2` | 동시에 libwebp 작업을 하는 요청 수 |
+
+로그 수준은 `RUST_LOG` 환경변수로 정한다(Rust `tracing` 관례).
+
+- 기본값 조합의 메모리 예산 위험(애니메이션 디코더가 캔버스 버퍼 2개를 쓴다)은 ADR-0012 "결과"를 본다.
 
 ## 4. 오류 매핑
 
@@ -140,7 +160,7 @@ docker run --rm --network none -e BUF_CACHE_DIR=/tmp/buf-cache \
 | 같은 입력을 RPC마다 다시 보내는 비용 | `GetFeatures` 다음 `Decode`에서 압축 입력을 두 번 보낸다. 압축 데이터는 작고 UDS라 우선 허용한다. 서버 쪽 세션/핸들 캐시는 상태가 생겨 단순함을 해치므로 측정 후 판단한다. | Phase 4 |
 | 오류 상세 (`google.rpc.ErrorInfo`) | v1은 status code + 메시지만 쓴다. 클라이언트가 상한 종류 같은 구조화 정보를 필요로 하면 추가한다. | Phase 2 |
 | 공유 메모리 전송 (memfd + UDS fd 전달) | gRPC 밖의 최적화다. 벤치마크에서 복사 비용이 지배적일 때만 검토한다. | Phase 4 이후 |
-| 애니메이션 순차 읽기 정책 | 2.4절 후보. | Phase 3 |
-| ICC 색 변환을 클라이언트에서 할까 | 서버는 ICC를 픽셀에 적용하지 않는다(ADR-0004). | Phase 3 |
+| 애니메이션 순차 읽기 정책 | 결정됨: [ADR-0014](../adr/0014-animation-and-metadata-mapping.md) | - |
+| ICC 색 변환을 클라이언트에서 할까 | 결정됨: 적용하지 않고 메타데이터로만 제공([ADR-0014](../adr/0014-animation-and-metadata-mapping.md)) | - |
 | Java 클라이언트의 JNI 없는 UDS | JDK `UnixDomainSocketAddress` + Netty NIO 경로가 grpc-java에서 동작하는지 미확인. PoC 결과에 따라 ADR-0003을 유지하거나 새 ADR을 쓴다. | Phase 2 첫 작업 |
-| gRPC 채널 수명 | 처음 쓸 때 만드는 공유 채널 하나. JDK 26부터 레지스트리 GC 시 `onDeregistration`이 호출되지 않으므로 정리를 거기에 맡기지 않는다([research/0004](../research/0004-jdk-baseline.md)). 데몬 스레드를 쓰는 등 JVM 종료를 막지 않는 방식을 정한다. | Phase 2 |
+| gRPC 채널 수명 | 기본값: 처음 쓸 때 만드는 공유 채널 하나, 데몬 스레드([client-jvm/README.md](../../client-jvm/README.md)). JDK 26부터 레지스트리 GC 시 `onDeregistration`이 호출되지 않으므로 정리를 거기에 맡기지 않는다([research/0004](../research/0004-jdk-baseline.md)). 데몬 스레드를 쓰는 등 JVM 종료를 막지 않는 방식을 정한다. | Phase 2 |

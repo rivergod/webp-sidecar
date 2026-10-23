@@ -65,6 +65,10 @@ docs/
 | [0009](adr/0009-license.md) | 프로젝트 라이선스: Apache-2.0 | accepted |
 | [0010](adr/0010-maven-coordinates.md) | Maven 좌표: `net.rivergod:webp-imageio-external-server-proto` | accepted |
 | [0011](adr/0011-hypothesis-criteria.md) | 가설 판정 기준: 디코딩 처리량 TwelveMonkeys 3배 이상, JNI 50% 이상 | accepted |
+| [0012](adr/0012-server-runtime-config.md) | 서버 실행 구성: 이름, 설정, 상한 기본값, 동시 처리, 컨테이너, 소켓 | accepted |
+| [0013](adr/0013-client-package-and-imageio-mapping.md) | 클라이언트 패키지와 ImageIO 매핑 | accepted |
+| [0014](adr/0014-animation-and-metadata-mapping.md) | 애니메이션·메타데이터 매핑 | accepted |
+| [0015](adr/0015-benchmark-method.md) | 벤치마크 방법: 환경, 샘플, SIMD 빌드, Wasm 비교 구현 | accepted |
 
 ### 조사
 
