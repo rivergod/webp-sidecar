@@ -1,0 +1,10 @@
+# 버릴 코드(스파이크). ADR-0002 결정 후 삭제한다. 결과는 docs/research/0003에 기록.
+[package]
+name = "rust-webp-decode"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# 벤더링된 libwebp 소스를 cc 크레이트로 정적 빌드한다(bindgen 결과는 크레이트에 미리 포함).
+libwebp-sys = "=0.14.4"

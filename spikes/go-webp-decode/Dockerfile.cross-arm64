@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1
+# 버릴 코드(스파이크). ADR-0002 결정 후 삭제한다. 결과는 docs/research/0003에 기록.
+#
+# amd64 호스트에서 linux/arm64(glibc, cgo) 바이너리를 에뮬레이션 없이 크로스 빌드할 수 있는지만 확인한다.
+# 실행 검증은 하지 않는다(호스트에 QEMU binfmt 없음). apt 패키지 버전은 고정하지 않았다.
+#   docker build -f Dockerfile.cross-arm64 --output type=local,dest=<출력 디렉터리> .
+FROM golang:1.27.3-trixie@sha256:fbb7ae40b62ff8afe31662df570d39b4f5052ac32b90dae8e60d7657a20a74f4 AS cross
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross \
+ && rm -rf /var/lib/apt/lists/*
+ARG LIBWEBP_VERSION=1.6.0
+ARG LIBWEBP_SHA256=e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564
+WORKDIR /build
+RUN curl -fsSLO "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-${LIBWEBP_VERSION}.tar.gz" \
+ && echo "${LIBWEBP_SHA256}  libwebp-${LIBWEBP_VERSION}.tar.gz" | sha256sum -c - \
+ && tar -xzf "libwebp-${LIBWEBP_VERSION}.tar.gz" \
+ && cd "libwebp-${LIBWEBP_VERSION}" \
+ && ./configure --host=aarch64-linux-gnu CC=aarch64-linux-gnu-gcc \
+      --prefix=/opt/libwebp-arm64 --disable-shared --enable-static \
+      --enable-libwebpmux --enable-libwebpdemux \
+      --disable-png --disable-jpeg --disable-tiff --disable-gif --disable-wic --disable-sdl --disable-gl \
+ && make -j"$(nproc)" \
+ && make install
+WORKDIR /src
+COPY go.mod main.go ./
+# 크로스 컴파일 시 cgo는 기본 비활성이므로 CGO_ENABLED=1과 CC를 명시한다.
+ENV CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc \
+    CGO_CFLAGS="-I/opt/libwebp-arm64/include -O2" \
+    CGO_LDFLAGS="-L/opt/libwebp-arm64/lib"
+RUN go build -trimpath -ldflags="-s -w" -o /out/go-webp-decode-arm64 .
+
+FROM scratch
+COPY --from=cross /out/go-webp-decode-arm64 /go-webp-decode-arm64

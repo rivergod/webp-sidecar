@@ -77,7 +77,7 @@ docs/         조사(research), 결정(adr), 설계(design), 규칙(conventions)
 - 요청마다 `cwebp`/`dwebp` 같은 CLI를 실행하는 서버 구현을 하지 않는다. 서버는 libwebp를 직접 링크한다.
 - JVM 클라이언트에 JNI나 네이티브 라이브러리를 넣지 않는다.
 - `ImageReaderSpi.canDecodeInput`에서 네트워크를 호출하지 않는다(로컬 매직 바이트 검사만).
-- 출처·라이선스가 `samples/SOURCES.md`에 없는 이미지를 커밋하지 않는다.
+- 출처·라이선스가 `samples/SOURCES.md`에 없는 이미지를 `samples/`에 커밋하지 않는다. `spikes/testdata/`처럼 다른 곳에 두는 작은 자체 생성 파일은 그 디렉터리의 README에 생성 방법과 해시를 적는다.
 - `spikes/` 코드를 프로덕션 디렉터리로 옮기지 않는다. 필요한 것은 다시 작성한다.
 - 비밀값(토큰, 키, `.env`)을 커밋하지 않는다.
 
