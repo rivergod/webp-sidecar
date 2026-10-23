@@ -7,7 +7,7 @@
 | Phase 0 | 기반 정리 | 완료 (`spikes/` 삭제는 보류) |
 | Phase 1 | 서버: 정지 이미지 디코딩/인코딩 + 헬스체크 + Docker | 완료 (2026-10-23) |
 | Phase 2 | JVM SPI 클라이언트(정지 이미지) + 통합 테스트 | 완료 (2026-10-23) |
-| Phase 3 | 애니메이션 + ICC/EXIF/XMP | 대기 |
+| Phase 3 | 애니메이션 + ICC/EXIF/XMP | 완료 (2026-10-23) |
 | Phase 4 | JMH 벤치마크 + 결과 보고서 | 대기 |
 | Phase 5 | 보안 강화(seccomp, 퍼징) + proto 회고 | 대기 |
 
@@ -64,12 +64,12 @@
 
 완료 기준:
 
-- [ ] `getNumImages(true)`가 프레임 수를, `read(i)`가 합성된 i번째 프레임을 돌려준다. 결과가 libwebp `WebPAnimDecoder` 기준 출력과 일치한다.
-- [ ] [ADR-0014](adr/0014-animation-and-metadata-mapping.md)의 순차 읽기 정책을 구현한다. `read(0..n-1)` 순차 읽기에서 `DecodeAnimation`이 한 번만 호출된다.
-- [ ] 시퀀스 쓰기(`writeToSequence`)로 만든 애니메이션을 다시 읽으면 프레임 픽셀(lossless), 표시 시간, 반복 횟수가 일치한다.
-- [ ] ICC/EXIF/XMP 읽기·쓰기 왕복에서 페이로드 바이트가 일치한다.
-- [ ] `IIOMetadata` 표준 포맷(`javax_imageio_1.0`)이 TwelveMonkeys와 같은 노드를 낸다. native 포맷 `net_rivergod_webp_imageio_1.0`([ADR-0014](adr/0014-animation-and-metadata-mapping.md))의 노드 구조를 설계 문서로 정하고 구현한다(TwelveMonkeys에는 native 포맷이 없다 — [research/0001](research/0001-java-webp-landscape.md)).
-- [ ] 애니메이션 악성 입력(프레임 수 초과, 캔버스 밖 프레임) 테스트가 통과한다.
+- [x] `getNumImages(true)`가 프레임 수를, `read(i)`가 합성된 i번째 프레임을 돌려준다. 결과가 libwebp `WebPAnimDecoder` 기준 출력과 일치한다. — 생성 애니메이션 12개(+메타 샘플)의 프레임별 해시가 manifest(WebPAnimDecoder 기준)와 일치
+- [x] [ADR-0014](adr/0014-animation-and-metadata-mapping.md)의 순차 읽기 정책을 구현한다. `read(0..n-1)` 순차 읽기에서 `DecodeAnimation`이 한 번만 호출된다. — 파일마다 스트림 1회 확인(AnimationMetadataIntegrationTest)
+- [x] 시퀀스 쓰기(`writeToSequence`)로 만든 애니메이션을 다시 읽으면 프레임 픽셀(lossless), 표시 시간, 반복 횟수가 일치한다.
+- [x] ICC/EXIF/XMP 읽기·쓰기 왕복에서 페이로드 바이트가 일치한다.
+- [x] `IIOMetadata` 표준 포맷(`javax_imageio_1.0`)이 TwelveMonkeys와 같은 노드를 낸다. native 포맷 `net_rivergod_webp_imageio_1.0`([ADR-0014](adr/0014-animation-and-metadata-mapping.md))의 노드 구조를 설계 문서로 정하고 구현한다(TwelveMonkeys에는 native 포맷이 없다 — [research/0001](research/0001-java-webp-landscape.md)). — 노드 구성은 TwelveMonkeys 소스 기준으로 맞췄고(WebPMetadataTest), 실제 출력 비교는 Phase 4 벤치 모듈에서 한다. native 포맷: [design/imageio-metadata.md](design/imageio-metadata.md)
+- [x] 애니메이션 악성 입력(프레임 수 초과, 캔버스 밖 프레임) 테스트가 통과한다. — 서버 samples.rs(손상 애니메이션 판정), animation.rs(max_frames, 프레임 크기). 출력량 폭탄은 Phase 5
 
 ## Phase 4: JMH 벤치마크 + 결과 보고서
 

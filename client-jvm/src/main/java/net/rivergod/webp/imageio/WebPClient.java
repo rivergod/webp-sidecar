@@ -10,9 +10,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import javax.imageio.IIOException;
+import net.rivergod.webp.imageio.proto.v1.DecodeAnimationOptions;
+import net.rivergod.webp.imageio.proto.v1.DecodeAnimationRequest;
 import net.rivergod.webp.imageio.proto.v1.DecodeOptions;
 import net.rivergod.webp.imageio.proto.v1.DecodeRequest;
 import net.rivergod.webp.imageio.proto.v1.DecodeResponse;
+import net.rivergod.webp.imageio.proto.v1.EncodeAnimationOptions;
+import net.rivergod.webp.imageio.proto.v1.EncodeAnimationRequest;
+import net.rivergod.webp.imageio.proto.v1.EncodeAnimationResponse;
+import net.rivergod.webp.imageio.proto.v1.EncodeFrame;
 import net.rivergod.webp.imageio.proto.v1.EncodeOptions;
 import net.rivergod.webp.imageio.proto.v1.EncodeRequest;
 import net.rivergod.webp.imageio.proto.v1.EncodeResponse;
@@ -23,6 +29,7 @@ import net.rivergod.webp.imageio.proto.v1.GetFeaturesRequest;
 import net.rivergod.webp.imageio.proto.v1.GetFeaturesResponse;
 import net.rivergod.webp.imageio.proto.v1.GetInfoRequest;
 import net.rivergod.webp.imageio.proto.v1.Limits;
+import net.rivergod.webp.imageio.proto.v1.PixelFormat;
 import net.rivergod.webp.imageio.proto.v1.WebPServiceGrpc;
 
 /**
@@ -169,6 +176,117 @@ final class WebPClient {
         stub().encode(call);
         EncodeRequest first = EncodeRequest.newBuilder().setOptions(options).build();
         run(call, "Encode", first, pixelChunks, b -> EncodeRequest.newBuilder().setPixels(b).build());
+    }
+
+    /**
+     * DecodeAnimation 스트림을 연다(ADR-0014 순차 읽기). 입력을 보내고 첫 메시지(특성)까지 받은 상태로 돌려준다.
+     * 호출자는 다 쓰면 {@link AnimationStream#close}한다.
+     *
+     * @throws IIOException 서버 불가, 손상 입력, 상한 초과 등
+     */
+    AnimationStream openDecodeAnimation(byte[] input, long maxPixels) throws IIOException {
+        AnimationStream stream = new AnimationStream(config);
+        stub().decodeAnimation(stream);
+        DecodeAnimationOptions.Builder options = DecodeAnimationOptions.newBuilder()
+                .setInputBytes(input.length)
+                .setPixelFormat(PixelFormat.PIXEL_FORMAT_RGBA8);
+        if (maxPixels > 0) {
+            options.setMaxPixels(maxPixels);
+        }
+        Iterator<ByteString> chunks = chunksOf(input);
+        DecodeAnimationRequest first = DecodeAnimationRequest.newBuilder().setOptions(options).build();
+        stream.start(new Iterator<>() {
+            private boolean sentFirst;
+
+            @Override
+            public boolean hasNext() {
+                return !sentFirst || chunks.hasNext();
+            }
+
+            @Override
+            public DecodeAnimationRequest next() {
+                if (!sentFirst) {
+                    sentFirst = true;
+                    return first;
+                }
+                return DecodeAnimationRequest.newBuilder().setWebpData(chunks.next()).build();
+            }
+        });
+        return stream;
+    }
+
+    /** 진행 중인 EncodeAnimation 업로드(ImageIO 시퀀스 쓰기 한 번). 한 스레드에서 쓴다. */
+    final class AnimationUpload {
+        private final StreamingCall<EncodeAnimationRequest, EncodeAnimationResponse> call;
+        private boolean open;
+
+        private AnimationUpload(StreamingCall<EncodeAnimationRequest, EncodeAnimationResponse> call) {
+            this.call = call;
+        }
+
+        private void send(EncodeAnimationRequest message) throws IIOException {
+            if (!open) {
+                return;
+            }
+            try {
+                open = call.send(message);
+            } catch (InterruptedException e) {
+                call.cancel("interrupted");
+                Thread.currentThread().interrupt();
+                throw new IIOException("Interrupted during WebP EncodeAnimation", e);
+            }
+        }
+
+        /** 프레임 하나(표시 시간 + 캔버스 RGBA8 조각들)를 보낸다. 서버가 이미 실패했으면 보내지 않는다(결과는 finish에서). */
+        void frame(int durationMs, Iterator<ByteString> pixels) throws IIOException {
+            send(EncodeAnimationRequest.newBuilder().setFrame(EncodeFrame.newBuilder().setDurationMs(durationMs)).build());
+            while (open && pixels.hasNext()) {
+                send(EncodeAnimationRequest.newBuilder().setPixels(pixels.next()).build());
+            }
+        }
+
+        /** 요청 스트림을 닫고 결과(수신기에 전달됨)를 기다린다. */
+        void finish() throws IIOException {
+            if (open) {
+                call.halfClose();
+            }
+            Throwable error;
+            try {
+                error = call.await();
+            } catch (InterruptedException e) {
+                call.cancel("interrupted");
+                Thread.currentThread().interrupt();
+                throw new IIOException("Interrupted during WebP EncodeAnimation", e);
+            }
+            if (error != null) {
+                throw GrpcErrors.toIIOException(error, "EncodeAnimation", config);
+            }
+        }
+
+        /** 업로드를 취소한다(abort, dispose). */
+        void cancel() {
+            call.cancel("writer aborted");
+        }
+    }
+
+    /**
+     * EncodeAnimation을 시작하고 options를 보낸다. 프레임은 {@link AnimationUpload#frame}으로 보낸다.
+     *
+     * @throws IIOException 서버 불가 등
+     */
+    AnimationUpload startEncodeAnimation(EncodeAnimationOptions options, EncodedReceiver receiver) throws IIOException {
+        StreamingCall<EncodeAnimationRequest, EncodeAnimationResponse> call = new StreamingCall<>(response -> {
+            switch (response.getPayloadCase()) {
+                case HEADER -> receiver.header(response.getHeader());
+                case WEBP_DATA -> receiver.data(response.getWebpData());
+                default -> throw new IIOException("WebP server sent an EncodeAnimation response without payload");
+            }
+        }, config.deadlineMs());
+        stub().encodeAnimation(call);
+        AnimationUpload upload = new AnimationUpload(call);
+        upload.open = true;
+        upload.send(EncodeAnimationRequest.newBuilder().setOptions(options).build());
+        return upload;
     }
 
     /** 요청 스트림을 보내고 응답이 끝날 때까지 기다린다. 실패는 IIOException으로 바꾼다. */

@@ -23,8 +23,9 @@ import net.rivergod.webp.imageio.proto.v1.ImageFeatures;
 import net.rivergod.webp.imageio.proto.v1.PixelFormat;
 
 /**
- * WebP {@link ImageReader}. 입력 전체를 읽어 서버에 보내고, 크기·프레임 수는 GetFeatures, 픽셀은 Decode로 받는다
- * (docs/design/grpc-api.md). ImageIO 규약대로 스레드 안전하지 않다.
+ * WebP {@link ImageReader}. 입력 전체를 읽어 서버에 보내고, 크기·프레임·메타데이터는 GetFeatures, 픽셀은 Decode
+ * (애니메이션 순차 읽기는 DecodeAnimation)로 받는다(docs/design/grpc-api.md, ADR-0014). ImageIO 규약대로 스레드
+ * 안전하지 않다.
  */
 final class WebPImageReader extends ImageReader {
 
@@ -32,6 +33,7 @@ final class WebPImageReader extends ImageReader {
     private long streamStart;
     private byte[] data;
     private GetFeaturesResponse features;
+    private AnimationStream cursor;
 
     WebPImageReader(ImageReaderSpi spi) {
         super(spi);
@@ -52,8 +54,17 @@ final class WebPImageReader extends ImageReader {
     }
 
     private void clearCache() {
+        closeCursor();
         data = null;
         features = null;
+    }
+
+    /** ADR-0014: 열어 둔 스트림은 서버 슬롯을 차지하므로 입력이 바뀌거나 리더를 버릴 때 바로 취소한다. */
+    private void closeCursor() {
+        if (cursor != null) {
+            cursor.close();
+            cursor = null;
+        }
     }
 
     private WebPClient client() throws IIOException {
@@ -104,11 +115,15 @@ final class WebPImageReader extends ImageReader {
         return data;
     }
 
-    private ImageFeatures features() throws IOException {
+    private GetFeaturesResponse response() throws IOException {
         if (features == null) {
             features = client().getFeatures(data(), !ignoreMetadata);
         }
-        return features.getFeatures();
+        return features;
+    }
+
+    private ImageFeatures features() throws IOException {
+        return response().getFeatures();
     }
 
     private void checkIndex(int imageIndex) throws IOException {
@@ -144,15 +159,29 @@ final class WebPImageReader extends ImageReader {
         return List.of(ImageTypeSpecifier.createFromBufferedImageType(type)).iterator();
     }
 
+    /** ICC/EXIF/XMP와 애니메이션 전체 정보(ADR-0014). {@code ignoreMetadata}면 null. */
     @Override
-    public IIOMetadata getStreamMetadata() {
-        return null;
+    public IIOMetadata getStreamMetadata() throws IOException {
+        if (ignoreMetadata) {
+            return null;
+        }
+        GetFeaturesResponse r = response();
+        return WebPStreamMetadata.from(r.hasMetadata() ? r.getMetadata() : null,
+                r.getFeatures().hasAnimation() ? r.getFeatures().getAnimation() : null);
     }
 
+    /** 프레임 정보(native)와 표준 포맷 노드(ADR-0014). {@code ignoreMetadata}면 null. */
     @Override
     public IIOMetadata getImageMetadata(int imageIndex) throws IOException {
         checkIndex(imageIndex);
-        return null;
+        if (ignoreMetadata) {
+            return null;
+        }
+        ImageFeatures f = features();
+        if (f.getHasAnimation() && f.getAnimation().getFramesCount() > imageIndex) {
+            return WebPImageMetadata.forFrame(f.getAnimation().getFrames(imageIndex));
+        }
+        return WebPImageMetadata.forStill(f);
     }
 
     @Override
@@ -177,17 +206,18 @@ final class WebPImageReader extends ImageReader {
 
         clearAbortRequest();
         processImageStarted(imageIndex);
-        ArgbFrameSink sink = new ArgbFrameSink(width, height, client().config().maxPixels(), alpha, target);
-        DecodeOptions.Builder options = DecodeOptions.newBuilder()
-                .setFrameIndex(imageIndex)
-                .setPixelFormat(PixelFormat.PIXEL_FORMAT_RGBA8);
-        if (client().config().maxPixels() > 0) {
-            options.setMaxPixels(client().config().maxPixels());
-        }
+        long maxPixels = client().config().maxPixels();
+        ArgbFrameSink sink = new ArgbFrameSink(width, height, maxPixels, alpha, target);
+        ProgressReceiver receiver = new ProgressReceiver(sink, imageIndex, (long) width * height * 4);
         try {
-            client().decode(data(), options.build(), new ProgressReceiver(sink, (long) width * height * 4));
+            if (f.getHasAnimation()) {
+                readAnimationFrame(imageIndex, receiver, maxPixels);
+            } else {
+                client().decode(data(), decodeOptions(imageIndex, maxPixels), receiver);
+            }
         } catch (IIOException e) {
             if (abortRequested()) {
+                closeCursor();
                 processReadAborted();
                 return dest;
             }
@@ -199,6 +229,42 @@ final class WebPImageReader extends ImageReader {
         }
         processImageComplete();
         return dest;
+    }
+
+    private static DecodeOptions decodeOptions(int frameIndex, long maxPixels) {
+        DecodeOptions.Builder options = DecodeOptions.newBuilder()
+                .setFrameIndex(frameIndex)
+                .setPixelFormat(PixelFormat.PIXEL_FORMAT_RGBA8);
+        if (maxPixels > 0) {
+            options.setMaxPixels(maxPixels);
+        }
+        return options.build();
+    }
+
+    /**
+     * ADR-0014 순차 읽기: 열어 둔 스트림의 다음 프레임이면 거기서 받고, 0번이면 스트림을 연다. 그 밖에는 스트림을 닫고
+     * Decode(frame_index)로 한 프레임만 받는다. 스트림이 실패하면(데드라인 등) 닫고 Decode로 한 번 다시 받는다.
+     */
+    private void readAnimationFrame(int imageIndex, ProgressReceiver receiver, long maxPixels) throws IOException {
+        if (cursor != null && cursor.nextFrame() == imageIndex) {
+            try {
+                cursor.readFrame(receiver);
+                return;
+            } catch (IIOException e) {
+                closeCursor();
+                if (abortRequested() || receiver.started()) {
+                    throw e;
+                }
+            }
+        } else {
+            closeCursor();
+            if (imageIndex == 0) {
+                cursor = client().openDecodeAnimation(data(), maxPixels);
+                cursor.readFrame(receiver);
+                return;
+            }
+        }
+        client().decode(data(), decodeOptions(imageIndex, maxPixels), receiver);
     }
 
     /**
@@ -252,20 +318,32 @@ final class WebPImageReader extends ImageReader {
         }
     }
 
-    /** 진행률을 알리고 abort 요청을 확인하는 수신기 래퍼. */
+    /** 진행률을 알리고 abort 요청과 프레임 번호를 확인하는 수신기 래퍼. */
     private final class ProgressReceiver implements WebPClient.FrameReceiver {
         private final ArgbFrameSink sink;
+        private final int frameIndex;
         private final long totalBytes;
         private long received;
         private int lastPercent = -1;
+        private boolean started;
 
-        ProgressReceiver(ArgbFrameSink sink, long totalBytes) {
+        ProgressReceiver(ArgbFrameSink sink, int frameIndex, long totalBytes) {
             this.sink = sink;
+            this.frameIndex = frameIndex;
             this.totalBytes = Math.max(1, totalBytes);
+        }
+
+        /** 헤더를 이미 받았으면 true(그 뒤의 실패는 다른 경로로 다시 받을 수 없다). */
+        boolean started() {
+            return started;
         }
 
         @Override
         public void header(FrameHeader header) throws IIOException {
+            if (header.getFrameIndex() != frameIndex) {
+                throw new IIOException("WebP server sent frame " + header.getFrameIndex() + ", expected " + frameIndex);
+            }
+            started = true;
             sink.header(header);
         }
 

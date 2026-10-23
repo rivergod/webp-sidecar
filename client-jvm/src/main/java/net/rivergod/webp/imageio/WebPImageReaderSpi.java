@@ -28,7 +28,8 @@ public final class WebPImageReaderSpi extends ImageReaderSpi {
     public WebPImageReaderSpi() {
         super(VENDOR, VERSION, NAMES, SUFFIXES, MIME_TYPES, "net.rivergod.webp.imageio.WebPImageReader",
                 new Class<?>[] {ImageInputStream.class}, new String[] {WebPImageWriterSpi.class.getName()},
-                false, null, null, null, null, false, null, null, null, null);
+                false, WebPStreamMetadataFormat.NATIVE_FORMAT_NAME, WebPStreamMetadataFormat.class.getName(), null, null,
+                true, WebPStreamMetadataFormat.NATIVE_FORMAT_NAME, WebPImageMetadataFormat.class.getName(), null, null);
     }
 
     /**

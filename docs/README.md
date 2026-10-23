@@ -48,6 +48,7 @@ docs/
 
 - [design/goals-and-constraints.md](design/goals-and-constraints.md) — 목표, 비목표, 핵심 설계 제약
 - [design/grpc-api.md](design/grpc-api.md) — gRPC API(`webp.v1`): 스트리밍 규칙, 상한, 오류 매핑, 클라이언트 설정
+- [design/imageio-metadata.md](design/imageio-metadata.md) — ImageIO 메타데이터 포맷, 애니메이션 읽기·쓰기 매핑
 
 ### ADR
 
@@ -69,6 +70,7 @@ docs/
 | [0013](adr/0013-client-package-and-imageio-mapping.md) | 클라이언트 패키지와 ImageIO 매핑 | accepted |
 | [0014](adr/0014-animation-and-metadata-mapping.md) | 애니메이션·메타데이터 매핑 | accepted |
 | [0015](adr/0015-benchmark-method.md) | 벤치마크 방법: 환경, 샘플, SIMD 빌드, Wasm 비교 구현 | accepted |
+| [0016](adr/0016-memory-budget-admission.md) | 메모리 예산 기반 요청 허용 | proposed |
 
 ### 조사
 
@@ -78,6 +80,8 @@ docs/
 - [research/0004-jdk-baseline.md](research/0004-jdk-baseline.md) — JDK 최소 버전, Spring 지원 현황, Java vs Kotlin, 빌드 도구
 - [research/0005-test-samples.md](research/0005-test-samples.md) — 테스트 샘플 후보, 라이선스, RFC 9649 절 대응표
 - [research/0006-license.md](research/0006-license.md) — 라이선스 후보, 의존성 라이선스와 호환성
+- [research/0007-server-memory-budget.md](research/0007-server-memory-budget.md) — 서버 메모리 예산 측정(정지·애니메이션)
+- [research/0008-java-uds-poc.md](research/0008-java-uds-poc.md) — Java UDS PoC, 변환 비용, JPMS
 
 ### 작업 규칙
 

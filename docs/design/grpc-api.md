@@ -163,7 +163,7 @@ docker run --rm --network none -e BUF_CACHE_DIR=/tmp/buf-cache \
 | 같은 입력을 RPC마다 다시 보내는 비용 | `GetFeatures` 다음 `Decode`에서 압축 입력을 두 번 보낸다. 압축 데이터는 작고 UDS라 우선 허용한다. 서버 쪽 세션/핸들 캐시는 상태가 생겨 단순함을 해치므로 측정 후 판단한다. | Phase 4 |
 | 오류 상세 (`google.rpc.ErrorInfo`) | v1은 status code + 메시지만 쓴다. 클라이언트가 상한 종류 같은 구조화 정보를 필요로 하면 추가한다. | Phase 2 |
 | 공유 메모리 전송 (memfd + UDS fd 전달) | gRPC 밖의 최적화다. 벤치마크에서 복사 비용이 지배적일 때만 검토한다. | Phase 4 이후 |
-| 애니메이션 순차 읽기 정책 | 결정됨: [ADR-0014](../adr/0014-animation-and-metadata-mapping.md) | - |
+| 애니메이션 순차 읽기 정책 | 결정·구현됨: [ADR-0014](../adr/0014-animation-and-metadata-mapping.md), [imageio-metadata.md §4](imageio-metadata.md) | - |
 | ICC 색 변환을 클라이언트에서 할까 | 결정됨: 적용하지 않고 메타데이터로만 제공([ADR-0014](../adr/0014-animation-and-metadata-mapping.md)) | - |
 | Java 클라이언트의 JNI 없는 UDS | 확인됨(Phase 2 PoC): 동작한다. `--illegal-native-access=deny`에서도 동작하고, native epoll 경로보다 약 5–9% 느리다. `:authority`를 `localhost`로 덮어써야 한다([research/0008](../research/0008-java-uds-poc.md)). ADR-0003 유지. | - |
 | gRPC 채널 수명 | 기본값: 처음 쓸 때 만드는 공유 채널 하나, 데몬 스레드([client-jvm/README.md](../../client-jvm/README.md)). JDK 26부터 레지스트리 GC 시 `onDeregistration`이 호출되지 않으므로 정리를 거기에 맡기지 않는다([research/0004](../research/0004-jdk-baseline.md)). 데몬 스레드를 쓰는 등 JVM 종료를 막지 않는 방식을 정한다. | Phase 2 |
