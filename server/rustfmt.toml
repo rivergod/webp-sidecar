@@ -1,0 +1,2 @@
+# 서버 코드 포맷. 실행: cargo fmt
+max_width = 120

@@ -1,0 +1,5 @@
+# 서버 빌드에 쓰는 Rust 툴체인. rustup이 이 파일을 보고 같은 버전을 자동으로 받는다.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
+targets = ["x86_64-unknown-linux-musl"]

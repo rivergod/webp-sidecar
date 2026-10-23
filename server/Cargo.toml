@@ -1,0 +1,36 @@
+[package]
+name = "webp-imageio-server"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "libwebp를 링크한 WebP gRPC 사이드카 서버 (webp.v1)"
+publish = false
+
+[dependencies]
+# ADR-0002, ADR-0008: libwebp v1.6.0을 벤더링한 원시 FFI 바인딩.
+libwebp-sys = "=0.14.4"
+tonic = "=0.14.6"
+tonic-prost = "=0.14.6"
+tonic-health = "=0.14.6"
+prost = "=0.14.4"
+bytes = "1"
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "fs"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+clap = { version = "4", features = ["derive", "env"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[build-dependencies]
+tonic-prost-build = "=0.14.6"
+
+[dev-dependencies]
+hyper-util = { version = "0.1", features = ["tokio"] }
+tower = "0.5"
+tempfile = "3"
+sha2 = "0.10"
+md-5 = "0.10"
+
+[profile.release]
+# 바이너리 크기와 성능의 균형. 패닉은 요청 단위로 처리하지 않으므로 unwind 유지.
+lto = "thin"
+codegen-units = 1

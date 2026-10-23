@@ -86,8 +86,8 @@ message FrameInfo {
 message AnimationInfo {
   // 반복 횟수. 0은 무한 반복이다.
   uint32 loop_count = 1;
-  // 캔버스 배경색, 0xAARRGGBB.
-  // 서버는 libwebp의 bgcolor(비트 0–7 A, 8–15 R, 16–23 G, 24–31 B)를 이 순서로 바꿔 넣는다.
+  // 캔버스 배경색, 0xAARRGGBB. 파일에는 [B, G, R, A] 바이트 순서로 저장되며(RFC 9649 §2.7.1.1),
+  // 이를 little-endian u32로 읽은 값(libwebp demux의 WEBP_FF_BACKGROUND_COLOR)이 곧 이 값이다.
   uint32 background_color_argb = 2;
   // 프레임별 정보. 길이는 ImageFeatures.frame_count와 같고 순서는 표시 순서다.
   repeated FrameInfo frames = 3;
