@@ -1,0 +1,27 @@
+# 의존성 버전(2026-10-23 Maven Central 최신 안정판). 바꾸면 Spring Boot 관리 버전과의 호환을 다시 확인한다(ADR-0005).
+[versions]
+grpc = "1.85.1"
+protobuf = "4.36.2"
+# grpc-netty 1.85.1이 쓰는 Netty 버전과 맞춘다(PoC의 native epoll 경로용).
+netty = "4.2.17.Final"
+junit = "6.1.3"
+testcontainers = "2.0.5"
+gson = "2.14.0"
+
+[libraries]
+grpc-netty = { module = "io.grpc:grpc-netty", version.ref = "grpc" }
+grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
+grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
+grpc-services = { module = "io.grpc:grpc-services", version.ref = "grpc" }
+protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
+netty-epoll = { module = "io.netty:netty-transport-native-epoll", version.ref = "netty" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+testcontainers = { module = "org.testcontainers:testcontainers", version.ref = "testcontainers" }
+testcontainers-junit = { module = "org.testcontainers:testcontainers-junit-jupiter", version.ref = "testcontainers" }
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+junit-params = { module = "org.junit.jupiter:junit-jupiter-params" }
+
+[plugins]
+protobuf = { id = "com.google.protobuf", version = "0.10.0" }
