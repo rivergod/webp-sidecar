@@ -1,0 +1,45 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 에디터 / IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+*.swp
+*~
+
+# 빌드 산출물 (Java/Gradle/Maven, Rust)
+build/
+out/
+target/
+.gradle/
+.kotlin/
+*.class
+**/*.rs.bk
+
+# Go 산출물
+*.exe
+*.test
+coverage.out
+
+# JVM 크래시 로그
+hs_err_pid*.log
+replay_pid*.log
+
+# 로그 / 임시
+*.log
+tmp/
+
+# 로컬 환경 (예시 파일만 커밋)
+.env
+.env.*
+!.env.example
+
+# AI 에이전트 개인 설정 (공유 설정은 커밋한다)
+.claude/settings.local.json
+CLAUDE.local.md

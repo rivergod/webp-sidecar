@@ -1,0 +1,8 @@
+라이선스 미정 (License: TBD)
+
+이 저장소의 라이선스는 아직 결정되지 않았다. 결정되면 이 파일을 해당 라이선스 전문으로 교체한다.
+
+결정 시 고려할 것:
+- 서버가 정적 링크하는 libwebp는 BSD-3-Clause다(배포물에 저작권 고지 포함 필요).
+- docs/conventions/working-principles.md는 MIT 라이선스 문서를 발췌·번역했다(저작권 및 허가 고지 유지 필요).
+- samples/의 외부 이미지는 파일별 라이선스를 samples/SOURCES.md에 따른다.

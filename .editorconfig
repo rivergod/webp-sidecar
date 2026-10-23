@@ -1,0 +1,22 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Markdown은 줄 끝 공백 두 칸이 줄바꿈 의미를 가질 수 있다.
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{json,yml,yaml,proto,mdc}]
+indent_size = 2
+
+[{*.go,go.mod,Makefile}]
+indent_style = tab
+
+[*.{bat,cmd,ps1}]
+end_of_line = crlf
