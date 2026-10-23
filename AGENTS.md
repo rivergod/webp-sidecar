@@ -71,7 +71,8 @@ docs/         조사(research), 결정(adr), 설계(design), 규칙(conventions)
 | 서버 이미지 | `docker build -f deploy/Dockerfile -t webp-imageio-server:dev .` | 컨테이너 스모크 테스트·메모리 측정: [deploy/README.md](deploy/README.md) |
 | 샘플 검사 | `python3 -I samples/scripts/manifest.py --check` | 다시 만들기·적합성 데이터 받기: [samples/README.md](samples/README.md) |
 | 서버 적합성(공식 벡터) | `cd server && cargo test --test conformance -- --ignored` | samples/conformance를 먼저 받는다 |
-| client-jvm | Phase 2에서 추가 (Gradle) | JDK 17 기준(`--release 17`) |
+| client-jvm 단위 테스트 | `./gradlew :client-jvm:test` | 컴파일에 `-Werror`와 공개 API javadoc 검사(doclint) 포함 |
+| client-jvm 통합 테스트 | `./gradlew :client-jvm:integrationTest` | Docker 필요(서버 이미지를 먼저 빌드한다). JDK 매트릭스: `:client-jvm:testMatrix`. 그 밖의 작업: [client-jvm/README.md](client-jvm/README.md) |
 | bench | 미정 | Phase 4 |
 
 ## 금지 사항

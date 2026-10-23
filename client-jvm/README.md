@@ -14,4 +14,25 @@ ImageIO `ImageReaderSpi` / `ImageWriterSpi` 구현체(gRPC 클라이언트). `Im
 - Gradle 루트는 저장소 루트(`settings.gradle.kts`)이고 하위 프로젝트는 `client-jvm`, `bench`다. Gradle wrapper를 커밋한다.
 - 클라이언트 설정 키는 [grpc-api.md §5](../docs/design/grpc-api.md) 그대로다(데드라인 기본 30 s).
 - gRPC 채널: 처음 쓸 때 만드는 공유 채널 하나, 데몬 스레드. `onDeregistration`에 정리를 맡기지 않는다.
-- 통합 테스트 서버: Testcontainers가 `deploy/`의 Dockerfile로 직접 빌드한다.
+- 통합 테스트 서버: Gradle `buildServerImage` 작업이 `deploy/Dockerfile`을 docker CLI로 빌드하고, Testcontainers가 그 이미지를 띄운다. (원래 기본값은 Testcontainers가 직접 빌드하는 것이었지만, 저장소 루트를 컨텍스트로 넘기면 `.dockerignore`가 적용되지 않아 `server/target` 등이 전송되므로 바꿨다.)
+
+## 명령
+
+| 작업 | 명령(저장소 루트) |
+|---|---|
+| 단위 테스트 | `./gradlew :client-jvm:test` |
+| 통합 테스트(Docker 필요) | `./gradlew :client-jvm:integrationTest` |
+| JDK 17/21/25/27 매트릭스 | `./gradlew :client-jvm:testMatrix` |
+| Spring Boot 4.1 관리 버전(grpc-java 1.84.1)으로 | `./gradlew :client-jvm:test :client-jvm:integrationTest -PbootCompat` |
+| UDS PoC / native access 거부 PoC | `./gradlew :client-jvm:udsPoc`, `./gradlew :client-jvm:udsPocDeny` |
+
+## 사용
+
+```java
+// 서버가 /run/webp-imageio/webp.sock에서 기다린다고 가정(기본값). 다른 곳이면 -Dwebp.imageio.endpoint=...
+BufferedImage image = ImageIO.read(new File("photo.webp"));
+ImageIO.write(image, "webp", new File("out.webp"));   // 기본: lossy, libwebp 기본 품질
+```
+
+- 무손실 쓰기: `ImageWriteParam`에서 `setCompressionMode(MODE_EXPLICIT)`, `setCompressionType("Lossless")`.
+- 서버가 없거나 응답하지 않으면 `IIOException("WebP server unavailable …")`, 손상 입력은 `IIOException("Invalid or corrupted WebP data …")`, 상한 초과는 `IIOException("WebP image exceeds … limit …")`. 원래 gRPC 예외는 cause에 있다.

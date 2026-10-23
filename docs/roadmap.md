@@ -6,7 +6,7 @@
 |---|---|---|
 | Phase 0 | 기반 정리 | 완료 (`spikes/` 삭제는 보류) |
 | Phase 1 | 서버: 정지 이미지 디코딩/인코딩 + 헬스체크 + Docker | 완료 (2026-10-23) |
-| Phase 2 | JVM SPI 클라이언트(정지 이미지) + 통합 테스트 | 대기 |
+| Phase 2 | JVM SPI 클라이언트(정지 이미지) + 통합 테스트 | 완료 (2026-10-23) |
 | Phase 3 | 애니메이션 + ICC/EXIF/XMP | 대기 |
 | Phase 4 | JMH 벤치마크 + 결과 보고서 | 대기 |
 | Phase 5 | 보안 강화(seccomp, 퍼징) + proto 회고 | 대기 |
@@ -50,15 +50,15 @@
 
 완료 기준:
 
-- [ ] 첫 작업: Java UDS PoC. JNI 없는 경로(JDK `UnixDomainSocketAddress` + Netty NIO)와 grpc-java 공식 경로(`unix:` + Netty native epoll)를 모두 테스트하고 동작 여부와 처리량을 기록한다(ADR-0003).
-- [ ] `ImageIO.read` / `ImageIO.write`가 정지 WebP를 처리한다. SPI는 classpath(`META-INF/services`)와 module path(`module-info`의 `provides`) 양쪽에서 등록된다.
-- [ ] `canDecodeInput`이 네트워크 없이 매직 바이트만 검사한다(단위 테스트, 손상 헤더 포함).
-- [ ] 설정이 시스템 프로퍼티 → 환경변수 → 기본값 순서로 해석된다(단위 테스트).
-- [ ] 오류 매핑: 서버 중지 → `UNAVAILABLE` 계열 메시지, 손상 입력 → `INVALID_ARGUMENT` 계열 메시지, 상한 초과 → 상한 메시지. 모두 cause에 원래 예외가 있다(통합 테스트).
-- [ ] 클라이언트가 응답 헤더 크기를 힙 할당 전에 검증한다(단위 테스트).
-- [ ] Testcontainers 통합 테스트가 TCP로 통과한다. UDS 통합 테스트는 지원 플랫폼에서 통과한다(ADR-0003).
-- [ ] 손상 입력으로 서버 프로세스를 죽여도 JVM은 살아 있고 `IIOException`을 받는다(ADR-0001 확인 방법).
-- [ ] RGBA8 → `BufferedImage` 변환 비용을 측정해 기록한다(ADR-0004 확인 방법).
+- [x] 첫 작업: Java UDS PoC. JNI 없는 경로(JDK `UnixDomainSocketAddress` + Netty NIO)와 grpc-java 공식 경로(`unix:` + Netty native epoll)를 모두 테스트하고 동작 여부와 처리량을 기록한다(ADR-0003). — [research/0008](research/0008-java-uds-poc.md)
+- [x] `ImageIO.read` / `ImageIO.write`가 정지 WebP를 처리한다. SPI는 classpath(`META-INF/services`)와 module path(`module-info`의 `provides`) 양쪽에서 등록된다. — module path는 `ModuleLayer` + `ServiceLoader`로 확인(SpiRegistrationTest)
+- [x] `canDecodeInput`이 네트워크 없이 매직 바이트만 검사한다(단위 테스트, 손상 헤더 포함).
+- [x] 설정이 시스템 프로퍼티 → 환경변수 → 기본값 순서로 해석된다(단위 테스트).
+- [x] 오류 매핑: 서버 중지 → `UNAVAILABLE` 계열 메시지, 손상 입력 → `INVALID_ARGUMENT` 계열 메시지, 상한 초과 → 상한 메시지. 모두 cause에 원래 예외가 있다(통합 테스트).
+- [x] 클라이언트가 응답 헤더 크기를 힙 할당 전에 검증한다(단위 테스트). — 통합 테스트에서 할당 전 검사 누락(OOM)을 찾아 고쳤다(GetFeatures 크기로 먼저 검사)
+- [x] Testcontainers 통합 테스트가 TCP로 통과한다. UDS 통합 테스트는 지원 플랫폼에서 통과한다(ADR-0003). — TCP·UDS 모두, JDK 17/21/25/27, Spring Boot 4.1 관리 버전(grpc-java 1.84.1)
+- [x] 손상 입력으로 서버 프로세스를 죽여도 JVM은 살아 있고 `IIOException`을 받는다(ADR-0001 확인 방법). — libwebp 1.6.0을 죽이는 입력이 없어 요청 처리 중 SIGKILL로 모사했다
+- [x] RGBA8 → `BufferedImage` 변환 비용을 측정해 기록한다(ADR-0004 확인 방법). — 4K 9.3–9.9 ms(research/0008)
 
 ## Phase 3: 애니메이션 + ICC/EXIF/XMP
 

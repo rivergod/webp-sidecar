@@ -140,7 +140,10 @@ SPI는 인자 없는 생성자로 전역 등록되므로 설정을 주입할 수
 
 ## 6. 언어별 생성 옵션
 
-proto 파일에는 `java_package`, `go_package` 같은 언어별 옵션을 넣지 않았다. 서버 언어(ADR-0002)와 클라이언트 패키지 이름(ADR-0005)이 정해지면 `buf.gen.yaml`의 managed mode로 지정한다.
+proto 파일에는 `java_package`, `go_package` 같은 언어별 옵션을 넣지 않는다. 생성할 때 지정한다.
+
+- Rust(서버): prost/tonic은 패키지 `webp.v1`을 그대로 모듈로 쓴다(`server/build.rs`).
+- Java(클라이언트): Gradle `prepareProto` 작업이 proto 사본의 `package webp.v1;` 다음 줄에 `option java_package = "net.rivergod.webp.imageio.proto.v1"; option java_multiple_files = true;`를 넣은 뒤 protoc를 돌린다(`client-jvm/build.gradle.kts`). ADR-0013은 buf managed mode를 수단으로 적었지만, Gradle의 protoc 경로에는 managed mode가 없어 같은 결과(패키지 이름, 원본에 언어 옵션 없음)를 이 방식으로 얻는다.
 
 ## 7. 검증
 
@@ -156,11 +159,11 @@ docker run --rm --network none -e BUF_CACHE_DIR=/tmp/buf-cache \
 
 | 질문 | 현재 판단 | 정할 때 |
 |---|---|---|
-| Java에서 클라이언트/양방향 스트리밍을 어떻게 동기 API(ImageReader)로 감쌀까 | grpc-java 블로킹 스텁은 unary와 서버 스트리밍용이다. async 스텁 + 블로킹 어댑터로 구현한다. 최신 grpc-java의 블로킹 양방향 지원 여부는 미확인. | Phase 2 |
+| Java에서 클라이언트/양방향 스트리밍을 어떻게 동기 API(ImageReader)로 감쌀까 | 결정됨(Phase 2): async 스텁 + 흐름 제어를 지키는 동기 어댑터(`client-jvm/.../StreamingCall.java`). 보내는 쪽은 `isReady`/`onReadyHandler`로 기다리고, 응답은 gRPC 콜백에서 바로 처리한다. | - |
 | 같은 입력을 RPC마다 다시 보내는 비용 | `GetFeatures` 다음 `Decode`에서 압축 입력을 두 번 보낸다. 압축 데이터는 작고 UDS라 우선 허용한다. 서버 쪽 세션/핸들 캐시는 상태가 생겨 단순함을 해치므로 측정 후 판단한다. | Phase 4 |
 | 오류 상세 (`google.rpc.ErrorInfo`) | v1은 status code + 메시지만 쓴다. 클라이언트가 상한 종류 같은 구조화 정보를 필요로 하면 추가한다. | Phase 2 |
 | 공유 메모리 전송 (memfd + UDS fd 전달) | gRPC 밖의 최적화다. 벤치마크에서 복사 비용이 지배적일 때만 검토한다. | Phase 4 이후 |
 | 애니메이션 순차 읽기 정책 | 결정됨: [ADR-0014](../adr/0014-animation-and-metadata-mapping.md) | - |
 | ICC 색 변환을 클라이언트에서 할까 | 결정됨: 적용하지 않고 메타데이터로만 제공([ADR-0014](../adr/0014-animation-and-metadata-mapping.md)) | - |
-| Java 클라이언트의 JNI 없는 UDS | JDK `UnixDomainSocketAddress` + Netty NIO 경로가 grpc-java에서 동작하는지 미확인. PoC 결과에 따라 ADR-0003을 유지하거나 새 ADR을 쓴다. | Phase 2 첫 작업 |
+| Java 클라이언트의 JNI 없는 UDS | 확인됨(Phase 2 PoC): 동작한다. `--illegal-native-access=deny`에서도 동작하고, native epoll 경로보다 약 5–9% 느리다. `:authority`를 `localhost`로 덮어써야 한다([research/0008](../research/0008-java-uds-poc.md)). ADR-0003 유지. | - |
 | gRPC 채널 수명 | 기본값: 처음 쓸 때 만드는 공유 채널 하나, 데몬 스레드([client-jvm/README.md](../../client-jvm/README.md)). JDK 26부터 레지스트리 GC 시 `onDeregistration`이 호출되지 않으므로 정리를 거기에 맡기지 않는다([research/0004](../research/0004-jdk-baseline.md)). 데몬 스레드를 쓰는 등 JVM 종료를 막지 않는 방식을 정한다. | Phase 2 |
