@@ -2,6 +2,7 @@
 # webp-imageio-server 컨테이너 이미지: musl 정적 바이너리 + scratch (ADR-0012).
 #
 # 빌드(저장소 루트에서): docker build -f deploy/Dockerfile -t webp-imageio-server:dev .
+# 벤치 참고용 AVX2 빌드(ADR-0015): ... --build-arg CARGO_FEATURES=simd-avx2 -t webp-imageio-server:dev-avx2 .
 # 실행 예와 격리 옵션: deploy/README.md, deploy/compose.yaml
 #
 # 기준 이미지 (2026-10-23 확인, 멀티 아키텍처 index digest로 고정)
@@ -16,7 +17,9 @@ WORKDIR /src
 COPY proto ./proto
 COPY server ./server
 WORKDIR /src/server
-RUN cargo build --release --locked \
+# 빈 값이면 기본 빌드(libwebp SSE2). server/Cargo.toml [features] 참고.
+ARG CARGO_FEATURES=""
+RUN cargo build --release --locked ${CARGO_FEATURES:+--features "$CARGO_FEATURES"} \
  && strip target/release/webp-imageio-server \
  && mkdir -p /out/run/webp-imageio \
  && cp target/release/webp-imageio-server /out/

@@ -73,7 +73,7 @@ docs/         조사(research), 결정(adr), 설계(design), 규칙(conventions)
 | 서버 적합성(공식 벡터) | `cd server && cargo test --test conformance -- --ignored` | samples/conformance를 먼저 받는다 |
 | client-jvm 단위 테스트 | `./gradlew :client-jvm:test` | 컴파일에 `-Werror`와 공개 API javadoc 검사(doclint) 포함 |
 | client-jvm 통합 테스트 | `./gradlew :client-jvm:integrationTest` | Docker 필요(서버 이미지를 먼저 빌드한다). JDK 매트릭스: `:client-jvm:testMatrix`. 그 밖의 작업: [client-jvm/README.md](client-jvm/README.md) |
-| bench | 미정 | Phase 4 |
+| bench | `bench/run.sh` (연결 확인만: `bench/run.sh smoke`) | Docker, taskset, Rust musl 타깃 필요. 전체 약 4시간. 상세: [bench/README.md](bench/README.md) |
 
 ## 금지 사항
 

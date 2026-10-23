@@ -146,4 +146,5 @@
 | 위치 | 출처 | 라이선스 | 고정 | 받는 방법 | 비고 |
 |---|---|---|---|---|---|
 | `conformance/` | [libwebp-test-data](https://chromium.googlesource.com/webm/libwebp-test-data) | 미확인 (LICENSE 파일 없음, 스크립트 헤더는 'same terms as libwebp' — BSD-3-Clause 추정) | 커밋 `06ddd96e276c2c638a72d39d3c0f340afd61978c`, 파일별 sha256: `conformance.lock.json` | `python3 -I samples/scripts/fetch_conformance.py` | libwebp_tests.md5에서는 .pam 줄만 비교에 쓴다(.pgm 줄은 미발표 libwebp 변경으로 갱신됨, research/0005). |
-| `bench/` | synthetic benchmark set | Apache-2.0 | 결정적 생성(고정 시드) | `python3 -I samples/scripts/bench_synth.py` | 합성 그래디언트+노이즈. 사진 샘플은 Phase 4에서 추가한다(public domain/CC0만, 내려받아 sha256 고정). |
+| `bench/synthetic/` | synthetic benchmark set | Apache-2.0 | 결정적 생성(고정 시드) | `python3 -I samples/scripts/bench_synth.py` | 합성 그래디언트+노이즈. 사진 세트와 함께 쓴다(ADR-0015). |
+| `bench/photo/` | [Space Shuttle Columbia launching (NASA)](https://commons.wikimedia.org/wiki/File:Space_Shuttle_Columbia_launching.jpg) | public domain (NASA) | 원본 JPEG sha256: `bench.lock.json` | `bench/run.sh inputs` | 6084x6084 JPEG을 받아 sha256을 확인하고, 자르고 줄여(PhotoSources) bench_synth.py와 같은 cwebp 옵션으로 인코딩한다(bench_photo.py). 애니메이션 1개(12프레임 팬)를 포함한다. |

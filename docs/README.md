@@ -82,6 +82,7 @@ docs/
 - [research/0006-license.md](research/0006-license.md) — 라이선스 후보, 의존성 라이선스와 호환성
 - [research/0007-server-memory-budget.md](research/0007-server-memory-budget.md) — 서버 메모리 예산 측정(정지·애니메이션)
 - [research/0008-java-uds-poc.md](research/0008-java-uds-poc.md) — Java UDS PoC, 변환 비용, JPMS
+- [research/0009-benchmark-results.md](research/0009-benchmark-results.md) — Phase 4 벤치마크 결과와 ADR-0011 가설 판정
 
 ### 작업 규칙
 

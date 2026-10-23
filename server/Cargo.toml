@@ -20,6 +20,11 @@ clap = { version = "4", features = ["derive", "env"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+[features]
+# 벤치 참고용 빌드(ADR-0015). libwebp 전체를 SSE4.1/AVX2로 컴파일한다. AVX2가 없는 CPU에서는 실행하지 못한다.
+# 기본 빌드(features 없음)는 x86_64 기준 SSE2만 쓴다.
+simd-avx2 = ["libwebp-sys/sse41", "libwebp-sys/avx2"]
+
 [build-dependencies]
 tonic-prost-build = "=0.14.6"
 
