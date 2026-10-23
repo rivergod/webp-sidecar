@@ -1,0 +1,8 @@
+---
+description: client-jvm/ 아래 ImageIO SPI 플러그인 코드를 작성하거나 수정할 때 적용하는 규칙
+globs: client-jvm/**
+alwaysApply: false
+---
+
+- 바꾸기 전에 `docs/conventions/code-documentation.md`, `docs/conventions/testing.md`, `docs/design/grpc-api.md`를 읽는다.
+- JDK 최소 버전, 구현 언어, 빌드 도구는 `docs/adr/0005-jdk-language-build.md`가 accepted된 뒤에 정해진다.

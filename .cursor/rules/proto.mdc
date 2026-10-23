@@ -1,0 +1,8 @@
+---
+description: proto/ 아래 Protobuf 정의를 작성하거나 수정할 때 적용하는 규칙
+globs: proto/**
+alwaysApply: false
+---
+
+- 바꾸기 전에 `docs/design/grpc-api.md`와 `docs/conventions/code-documentation.md`를 읽는다.
+- 모든 서비스, RPC, 메시지, 필드, oneof, enum, enum 값에 선행 주석을 단다. 바꾼 뒤 `AGENTS.md`의 proto lint 명령을 실행한다.

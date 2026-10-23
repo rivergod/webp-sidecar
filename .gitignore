@@ -43,3 +43,4 @@ tmp/
 # AI 에이전트 개인 설정 (공유 설정은 커밋한다)
 .claude/settings.local.json
 CLAUDE.local.md
+AGENTS.override.md
