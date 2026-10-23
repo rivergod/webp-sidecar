@@ -42,7 +42,7 @@ docs/
 
 ### 계획
 
-- [roadmap.md](roadmap.md) — Phase 0~5와 각 완료 기준
+- [roadmap.md](roadmap.md) — Phase 0~5와 각 완료 기준, 첫 배포 전 결정 사항
 
 ### 설계
 
@@ -62,8 +62,9 @@ docs/
 | [0006](adr/0006-test-samples.md) | 테스트 샘플 세트 구성과 라이선스 | accepted |
 | [0007](adr/0007-agent-glue.md) | AI 에이전트 규칙: AGENTS.md 단일 원본 + 얇은 연결 파일 | accepted |
 | [0008](adr/0008-libwebp-version-pinning.md) | libwebp 버전 고정: 최신 릴리스 태그 + main 미릴리스 수정 추적 | accepted |
-| [0009](adr/0009-license.md) | 프로젝트 라이선스: Apache-2.0 | proposed |
+| [0009](adr/0009-license.md) | 프로젝트 라이선스: Apache-2.0 | accepted |
 | [0010](adr/0010-maven-coordinates.md) | Maven 좌표: `net.rivergod:webp-imageio-external-server-proto` | accepted |
+| [0011](adr/0011-hypothesis-criteria.md) | 가설 판정 기준: 디코딩 처리량 TwelveMonkeys 3배 이상, JNI 50% 이상 | accepted |
 
 ### 조사
 

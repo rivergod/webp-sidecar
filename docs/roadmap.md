@@ -4,7 +4,7 @@
 
 | 단계 | 내용 | 상태 |
 |---|---|---|
-| Phase 0 | 기반 정리 | 진행 중 — 라이선스 결정, `spikes/` 정리 남음 |
+| Phase 0 | 기반 정리 | 완료 (`spikes/` 삭제는 보류) |
 | Phase 1 | 서버: 정지 이미지 디코딩/인코딩 + 헬스체크 + Docker | 대기 |
 | Phase 2 | JVM SPI 클라이언트(정지 이미지) + 통합 테스트 | 대기 |
 | Phase 3 | 애니메이션 + ICC/EXIF/XMP | 대기 |
@@ -23,7 +23,7 @@
 - [x] 사람이 ADR-0002(서버 언어), ADR-0003(전송), ADR-0004(픽셀 포맷), ADR-0005(JDK·언어·빌드 도구), ADR-0008(libwebp 버전 고정)을 `accepted` 또는 `rejected`로 결정한다. — 2026-10-23, ADR 0001–0008 모두 accepted.
 - [ ] ADR-0002가 정해지면 `spikes/`를 삭제한다(결과는 research/0003에 남아 있다).
 - [x] 서버 언어를 사람이 결정한다 — 2026-10-23 Rust. 팀 친숙도 질문의 개별 답은 기록되지 않았다([research/0003](research/0003-server-language-rust-vs-go.md) 8절).
-- [ ] 라이선스를 정한다([LICENSE](../LICENSE)).
+- [x] 라이선스를 정한다 — 2026-10-23 Apache-2.0([ADR-0009](adr/0009-license.md)). 저작권자 표기와 `NOTICE`는 첫 배포 때 정한다.
 
 ## Phase 1: 서버 — 정지 이미지 + 헬스체크 + Docker
 
@@ -74,12 +74,22 @@
 
 완료 기준:
 
-- [ ] 같은 샘플로 이 플러그인(UDS, TCP), TwelveMonkeys, darkxanter, libwebp Wasm + Chicory(ADR-0001의 경쟁 대안)를 비교한다. JDeli는 트라이얼 jar가 있을 때만 포함한다.
+- [ ] 같은 샘플로 이 플러그인(UDS, TCP), TwelveMonkeys, darkxanter, libwebp Wasm + Chicory(ADR-0001의 경쟁 대안)를 비교한다.
+- [ ] JDeli 트라이얼을 받을 수 있으면 비교에 포함한다. 트라이얼은 업무용 이메일 등록이 필요하고 평가(비운영) 용도로만 쓸 수 있으며, 만료일이 있다. 결과를 저장소 밖에 공개하기 전에 트라이얼 라이선스 파일에서 벤치마크 공개 조건을 확인한다(공개 자료로는 미확인).
+- [ ] 결과를 [ADR-0011](adr/0011-hypothesis-criteria.md)의 기준(1024×768 이상 디코딩에서 TwelveMonkeys의 3배 이상, JNI의 50% 이상)으로 판정한다.
 - [ ] libwebp를 Wasm으로 빌드해 Chicory로 실행하는 비교 구현을 `bench/`에 둔다(벤치 전용, 제품 코드 아님). 사용한 libwebp 버전과 Wasm 빌드 옵션(SIMD, 스레드)을 기록한다.
 - [ ] 이미지 크기별(작음/중간/4K 이상), 종류별(lossy/lossless/alpha/애니메이션)로 측정한다.
 - [ ] 벤치마크를 한 명령으로 재현할 수 있고, 환경(CPU, OS, JDK, libwebp 버전, JMH 설정)이 결과와 함께 기록된다.
 - [ ] 결과 보고서를 `docs/research/`에 쓰고, 벤더 공개 수치([research/0001](research/0001-java-webp-landscape.md))와 비교한다.
 - [ ] 청크 크기, 전송 방식(UDS/TCP), 픽셀 변환 비용에 대한 결론을 ADR-0003/0004의 확인 방법에 맞춰 적는다.
+
+## 첫 배포 전 결정
+
+첫 배포(외부 공개나 아티팩트 배포)를 하기 전에 정한다(결정자 지시, 2026-10-23).
+
+- [ ] 저작권자 표기(개인/조직)와 `NOTICE` 파일([ADR-0009](adr/0009-license.md))
+- [ ] 원격 저장소 위치·공개 여부와 CI
+- [ ] Maven Central 배포 여부. 배포하면 `rivergod.net`에 DNS TXT 레코드로 namespace를 확인받아야 한다([ADR-0010](adr/0010-maven-coordinates.md)).
 
 ## Phase 5: 보안 강화 + proto 회고
 

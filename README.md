@@ -35,4 +35,4 @@ Phase 0(기반 정리). 단계별 계획과 완료 기준은 [docs/roadmap.md](d
 
 ## 라이선스
 
-미정. [LICENSE](LICENSE) 참고.
+Apache License 2.0. [LICENSE](LICENSE) 참고. 제3자 내용은 각자의 라이선스를 따른다(예: [docs/conventions/working-principles.md](docs/conventions/working-principles.md)의 발췌는 MIT).
