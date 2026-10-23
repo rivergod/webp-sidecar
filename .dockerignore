@@ -1,0 +1,9 @@
+# 빌드 컨텍스트는 저장소 루트다(deploy/Dockerfile). 필요한 것만 보낸다.
+.git
+**/target
+**/build
+**/.gradle
+samples/bench
+samples/conformance
+spikes
+bench/wasm/build

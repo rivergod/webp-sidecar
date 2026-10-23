@@ -1,0 +1,21 @@
+# 의존성 라이선스·출처 검사(ADR-0009). 실행: server/에서 `cargo deny check licenses sources`
+# 허용 목록은 Apache-2.0 프로젝트에 넣을 수 있는 허용적 라이선스만 둔다(docs/research/0006-license.md).
+
+[graph]
+targets = ["x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl"]
+
+[licenses]
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-3-Clause",
+  "MIT",
+  "Unicode-3.0",
+  "Zlib",
+]
+confidence-threshold = 0.9
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

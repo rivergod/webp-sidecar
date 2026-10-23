@@ -1,0 +1,14 @@
+# 서버 바이너리에 들어가는 Rust 의존성의 제3자 고지 생성(ADR-0009).
+# 실행(server/에서): cargo about generate --frozen about.hbs -o licenses/THIRD-PARTY-NOTICES.txt
+# libwebp C 코드의 고지는 licenses/libwebp-COPYING, licenses/libwebp-PATENTS에 따로 둔다.
+accepted = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-3-Clause",
+  "MIT",
+  "Unicode-3.0",
+  "Zlib",
+]
+targets = ["x86_64-unknown-linux-musl"]
+ignore-build-dependencies = true
+ignore-dev-dependencies = true

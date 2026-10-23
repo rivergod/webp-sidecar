@@ -66,7 +66,9 @@ docs/         조사(research), 결정(adr), 설계(design), 규칙(conventions)
 | 대상 | 명령 | 비고 |
 |---|---|---|
 | proto lint | `docker run --rm --network none -e BUF_CACHE_DIR=/tmp/buf-cache -v "$PWD:/workspace:ro" -w /workspace bufbuild/buf:1.75.0 lint` | 저장소 루트에서 실행 |
-| server | Phase 1에서 추가 (Rust, cargo) | 툴체인 준비: [server/README.md](server/README.md) |
+| server 검사·테스트 | `cd server && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test` | 단위 + 통합(프로세스 안 UDS 서버). 툴체인: [server/README.md](server/README.md) |
+| server 의존성 라이선스 | `cd server && cargo deny check licenses sources` | 의존성을 바꾸면 고지 재생성: `cargo about generate --frozen about.hbs -o licenses/THIRD-PARTY-NOTICES.txt` |
+| 서버 이미지 | `docker build -f deploy/Dockerfile -t webp-imageio-server:dev .` | 컨테이너 스모크 테스트·메모리 측정: [deploy/README.md](deploy/README.md) |
 | client-jvm | Phase 2에서 추가 (Gradle) | JDK 17 기준(`--release 17`) |
 | bench | 미정 | Phase 4 |
 
