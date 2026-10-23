@@ -4,7 +4,7 @@
 
 | 단계 | 내용 | 상태 |
 |---|---|---|
-| Phase 0 | 기반 정리 | 진행 중 — 사람의 ADR 결정 대기 |
+| Phase 0 | 기반 정리 | 진행 중 — 라이선스 결정, `spikes/` 정리 남음 |
 | Phase 1 | 서버: 정지 이미지 디코딩/인코딩 + 헬스체크 + Docker | 대기 |
 | Phase 2 | JVM SPI 클라이언트(정지 이미지) + 통합 테스트 | 대기 |
 | Phase 3 | 애니메이션 + ICC/EXIF/XMP | 대기 |
@@ -20,9 +20,9 @@
 - [x] 위 산출물이 `docs/README.md` 인덱스에서 모두 연결된다.
 - [x] 모든 ADR이 `proposed` 상태이고 선택지 비교와 추천안이 있다.
 - [x] `buf lint`(STANDARD + COMMENTS)가 통과한다.
-- [ ] 사람이 ADR-0002(서버 언어), ADR-0003(전송), ADR-0004(픽셀 포맷), ADR-0005(JDK·언어·빌드 도구), ADR-0008(libwebp 버전 고정)을 `accepted` 또는 `rejected`로 결정한다.
+- [x] 사람이 ADR-0002(서버 언어), ADR-0003(전송), ADR-0004(픽셀 포맷), ADR-0005(JDK·언어·빌드 도구), ADR-0008(libwebp 버전 고정)을 `accepted` 또는 `rejected`로 결정한다. — 2026-10-23, ADR 0001–0008 모두 accepted.
 - [ ] ADR-0002가 정해지면 `spikes/`를 삭제한다(결과는 research/0003에 남아 있다).
-- [ ] 서버 언어 조사의 "팀 친숙도" 항목에 사람의 답을 기록한다([research/0003](research/0003-server-language-rust-vs-go.md)).
+- [x] 서버 언어를 사람이 결정한다 — 2026-10-23 Rust. 팀 친숙도 질문의 개별 답은 기록되지 않았다([research/0003](research/0003-server-language-rust-vs-go.md) 8절).
 - [ ] 라이선스를 정한다([LICENSE](../LICENSE)).
 
 ## Phase 1: 서버 — 정지 이미지 + 헬스체크 + Docker
@@ -38,7 +38,7 @@
 - [ ] lossy 인코딩 왕복이 이름 붙은 PSNR 임계값 이상이다(측정 근거를 상수 주석에 기록).
 - [ ] 4MB를 넘는 이미지(예: 3840×2160)가 청크 스트리밍으로 디코딩·인코딩된다.
 - [ ] 손상/악성 입력(잘림, 크기 필드 조작, 거대 크기 선언)이 `INVALID_ARGUMENT` 또는 `RESOURCE_EXHAUSTED`로 거부되고 서버는 계속 응답한다.
-- [ ] 상한 초안값([grpc-api.md §3](design/grpc-api.md))을 확정하고 근거를 적는다.
+- [ ] 상한을 서버 설정값으로 받는다(코드에 고정하지 않는다). 설정 방식과 키 이름, 기본값과 그 근거를 [grpc-api.md §3](design/grpc-api.md)에 적는다.
 - [ ] `grpc.health.v1.Health/Check`가 `SERVING`을 돌려준다.
 - [ ] Docker 이미지가 non-root, read-only 루트 파일시스템, 외부 네트워크 없음으로 실행되고, 공유 볼륨의 UDS로 호출된다.
 - [ ] 서버 단위 테스트와 문서 주석 린터가 통과하고, 그 명령이 `AGENTS.md`에 적혀 있다.
@@ -49,6 +49,7 @@
 
 완료 기준:
 
+- [ ] 첫 작업: Java UDS PoC. JNI 없는 경로(JDK `UnixDomainSocketAddress` + Netty NIO)와 grpc-java 공식 경로(`unix:` + Netty native epoll)를 모두 테스트하고 동작 여부와 처리량을 기록한다(ADR-0003).
 - [ ] `ImageIO.read` / `ImageIO.write`가 정지 WebP를 처리한다. SPI는 classpath(`META-INF/services`)와 module path(`module-info`의 `provides`) 양쪽에서 등록된다.
 - [ ] `canDecodeInput`이 네트워크 없이 매직 바이트만 검사한다(단위 테스트, 손상 헤더 포함).
 - [ ] 설정이 시스템 프로퍼티 → 환경변수 → 기본값 순서로 해석된다(단위 테스트).
@@ -73,7 +74,8 @@
 
 완료 기준:
 
-- [ ] 같은 샘플로 이 플러그인(UDS, TCP), TwelveMonkeys, darkxanter를 비교한다. JDeli는 트라이얼 jar가 있을 때만 포함한다.
+- [ ] 같은 샘플로 이 플러그인(UDS, TCP), TwelveMonkeys, darkxanter, libwebp Wasm + Chicory(ADR-0001의 경쟁 대안)를 비교한다. JDeli는 트라이얼 jar가 있을 때만 포함한다.
+- [ ] libwebp를 Wasm으로 빌드해 Chicory로 실행하는 비교 구현을 `bench/`에 둔다(벤치 전용, 제품 코드 아님). 사용한 libwebp 버전과 Wasm 빌드 옵션(SIMD, 스레드)을 기록한다.
 - [ ] 이미지 크기별(작음/중간/4K 이상), 종류별(lossy/lossless/alpha/애니메이션)로 측정한다.
 - [ ] 벤치마크를 한 명령으로 재현할 수 있고, 환경(CPU, OS, JDK, libwebp 버전, JMH 설정)이 결과와 함께 기록된다.
 - [ ] 결과 보고서를 `docs/research/`에 쓰고, 벤더 공개 수치([research/0001](research/0001-java-webp-landscape.md))와 비교한다.

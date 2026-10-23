@@ -5,4 +5,4 @@ alwaysApply: false
 ---
 
 - 바꾸기 전에 `docs/conventions/code-documentation.md`, `docs/conventions/testing.md`, `docs/design/grpc-api.md`를 읽는다.
-- JDK 최소 버전, 구현 언어, 빌드 도구는 `docs/adr/0005-jdk-language-build.md`가 accepted된 뒤에 정해진다.
+- Java, JDK 17 기준(`--release 17`), Gradle이다(`docs/adr/0005-jdk-language-build.md`). JNI와 네이티브 라이브러리는 쓰지 않는다.

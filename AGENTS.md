@@ -13,8 +13,8 @@ libwebp를 별도 프로세스(gRPC 사이드카 서버)로 격리하고, JVM에
 
 ```
 proto/        gRPC/Protobuf 정의 (webp/v1)
-server/       libwebp gRPC 서버 (언어: ADR-0002)
-client-jvm/   ImageIO SPI 플러그인 (JDK·언어·빌드 도구: ADR-0005)
+server/       libwebp gRPC 서버 (Rust: ADR-0002)
+client-jvm/   ImageIO SPI 플러그인 (Java 17, Gradle: ADR-0005)
 bench/        JMH 벤치마크 (별도 모듈)
 samples/      테스트 이미지 + SOURCES.md(출처·라이선스·해시)
 deploy/       Dockerfile, compose, 보안 프로파일
@@ -66,8 +66,8 @@ docs/         조사(research), 결정(adr), 설계(design), 규칙(conventions)
 | 대상 | 명령 | 비고 |
 |---|---|---|
 | proto lint | `docker run --rm --network none -e BUF_CACHE_DIR=/tmp/buf-cache -v "$PWD:/workspace:ro" -w /workspace bufbuild/buf:1.75.0 lint` | 저장소 루트에서 실행 |
-| server | 미정 | ADR-0002 확정 후 추가 |
-| client-jvm | 미정 | ADR-0005 확정 후 추가 |
+| server | Phase 1에서 추가 (Rust, cargo) | 툴체인 준비: [server/README.md](server/README.md) |
+| client-jvm | Phase 2에서 추가 (Gradle) | JDK 17 기준(`--release 17`) |
 | bench | 미정 | Phase 4 |
 
 ## 금지 사항

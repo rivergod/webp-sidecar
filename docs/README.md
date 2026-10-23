@@ -54,14 +54,14 @@ docs/
 | 번호 | 제목 | 상태 |
 |---|---|---|
 | [0000](adr/0000-template.md) | 템플릿 | - |
-| [0001](adr/0001-isolate-libwebp-in-grpc-sidecar.md) | libwebp를 별도 프로세스(gRPC 사이드카)로 격리 | proposed |
-| [0002](adr/0002-server-language.md) | 서버 구현 언어: Rust vs Go | proposed |
-| [0003](adr/0003-transport.md) | 전송 방식: UDS 기본, TCP 옵션, 청크 스트리밍 | proposed |
-| [0004](adr/0004-pixel-transfer-format.md) | 픽셀 전송 포맷: RGBA8 비-premultiplied, 행 패딩 없음 | proposed |
-| [0005](adr/0005-jdk-language-build.md) | JDK 최소 버전, 클라이언트 구현 언어, 빌드 도구 | proposed |
-| [0006](adr/0006-test-samples.md) | 테스트 샘플 세트 구성과 라이선스 | proposed |
-| [0007](adr/0007-agent-glue.md) | AI 에이전트 규칙: AGENTS.md 단일 원본 + 얇은 연결 파일 | proposed |
-| [0008](adr/0008-libwebp-version-pinning.md) | libwebp 버전 고정: 최신 릴리스 태그 + main 미릴리스 수정 추적 | proposed |
+| [0001](adr/0001-isolate-libwebp-in-grpc-sidecar.md) | libwebp를 별도 프로세스(gRPC 사이드카)로 격리 | accepted |
+| [0002](adr/0002-server-language.md) | 서버 구현 언어: Rust (tonic + libwebp-sys) | accepted |
+| [0003](adr/0003-transport.md) | 전송 방식: UDS 기본, TCP 옵션, 1 MiB 청크 스트리밍 | accepted |
+| [0004](adr/0004-pixel-transfer-format.md) | 픽셀 전송 포맷: RGBA8 비-premultiplied, 행 패딩 없음 | accepted |
+| [0005](adr/0005-jdk-language-build.md) | 클라이언트: JDK 17, Java, Gradle | accepted |
+| [0006](adr/0006-test-samples.md) | 테스트 샘플 세트 구성과 라이선스 | accepted |
+| [0007](adr/0007-agent-glue.md) | AI 에이전트 규칙: AGENTS.md 단일 원본 + 얇은 연결 파일 | accepted |
+| [0008](adr/0008-libwebp-version-pinning.md) | libwebp 버전 고정: 최신 릴리스 태그 + main 미릴리스 수정 추적 | accepted |
 
 ### 조사
 

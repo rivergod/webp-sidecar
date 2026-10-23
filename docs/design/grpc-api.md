@@ -1,6 +1,6 @@
 # gRPC API 설계 (`webp.v1`)
 
-- 상태: 초안 (ADR-0003, ADR-0004가 accepted되면 함께 확정)
+- 상태: 초안. 기반 결정(ADR-0003, ADR-0004)은 accepted. Phase 1~3 구현 중에 갱신한다.
 - 정의 파일: [proto/webp/v1/webp_service.proto](../../proto/webp/v1/webp_service.proto), [proto/webp/v1/image.proto](../../proto/webp/v1/image.proto)
 - 관련: [ADR-0003 전송 방식](../adr/0003-transport.md), [ADR-0004 픽셀 전송 포맷](../adr/0004-pixel-transfer-format.md), [목표와 제약](goals-and-constraints.md)
 
@@ -70,7 +70,7 @@ sequenceDiagram
 
 ## 3. 상한과 decompression bomb 방어
 
-| 상한 (`Limits`) | 의미 | 서버 검사 시점 | 초안값 |
+| 상한 (`Limits`) | 의미 | 서버 검사 시점 | 기본값 (초안) |
 |---|---|---|---|
 | `max_input_bytes` | 압축 입력 크기 | `options.input_bytes` 수신 즉시, 조각 수신 중 누적값 | 64 MiB |
 | `max_pixels` | 캔버스 width × height | 헤더 파싱 직후, 픽셀 버퍼 할당 전 | 8192 × 8192 (67,108,864) |
@@ -78,8 +78,10 @@ sequenceDiagram
 | `max_metadata_bytes` | ICC+EXIF+XMP 합 | demux 직후, `options` 수신 즉시(인코딩) | 2 MiB |
 | `max_chunk_bytes` | 조각 하나 크기 | 조각 수신마다 | 1 MiB (ADR-0003) |
 
+- **상한은 서버 설정값이다**(결정 2026-10-23). 코드에 고정하지 않고 서버가 시작할 때 설정에서 읽어 적용하며, `GetInfo`의 `Limits`로 그대로 노출한다. 설정 방식(환경변수, 명령줄 인자, 설정 파일)과 키 이름은 Phase 1에서 정한다.
+- 서버는 시작할 때 설정값을 검사한다. `max_chunk_bytes`와 `max_metadata_bytes`는 메시지 하나에 실리므로 gRPC 기본 메시지 한도(4MB)보다 작아야 한다(ADR-0003의 불변식). 어기면 시작하지 않는다.
 - 픽셀 수 상한이 필요한 근거: VP8X 캔버스만 16384×16384로 바꾼 298바이트짜리 유효한 애니메이션 파일 하나로 디코더가 1GiB 할당을 시도한다([research/0005](../research/0005-test-samples.md) "손상/악성 입력").
-- **초안값은 근거 없는 출발점이다.** Phase 1에서 컨테이너 메모리 제한과 함께 정하고 근거를 이 표에 적는다.
+- **기본값은 근거 없는 출발점이다.** Phase 1에서 컨테이너 메모리 제한과 함께 기본값을 정하고 근거를 이 표에 적는다.
 - 클라이언트는 `DecodeOptions.max_pixels`로 더 엄격한 상한을 보낼 수 있다. 서버는 둘 중 작은 값을 적용한다.
 - 클라이언트도 응답 `FrameHeader`를 받으면 할당 전에 다시 검증한다. Java 배열 한도(약 2^31 원소) 때문에 RGBA8 `byte[]` 하나로는 약 5.3억 픽셀을 넘을 수 없다. libwebp 최대 크기(16383 × 16383 ≈ 2.7억 픽셀)는 그 안에 든다.
 - 정지 이미지는 `WebPGetFeatures`로, 애니메이션은 `WebPDemux`의 캔버스 크기와 프레임 수로 검사한다.

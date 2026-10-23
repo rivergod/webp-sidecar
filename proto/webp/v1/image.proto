@@ -136,7 +136,8 @@ message EncodedHeader {
   uint64 webp_bytes = 1;
 }
 
-// Limits는 서버가 적용하는 상한이다. 요청이 상한을 넘으면 서버는 작업 전에 RESOURCE_EXHAUSTED로 거부한다.
+// Limits는 서버가 적용하는 상한이다. 값은 서버 설정에서 온다(docs/design/grpc-api.md §3).
+// 요청이 상한을 넘으면 서버는 작업 전에 RESOURCE_EXHAUSTED로 거부한다.
 message Limits {
   // 압축된 WebP 입력의 최대 크기. 단위: 바이트.
   uint64 max_input_bytes = 1;

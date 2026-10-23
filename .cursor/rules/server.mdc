@@ -5,4 +5,4 @@ alwaysApply: false
 ---
 
 - 바꾸기 전에 `docs/conventions/code-documentation.md`, `docs/conventions/testing.md`, `docs/design/grpc-api.md`를 읽는다.
-- 서버 구현 언어는 `docs/adr/0002-server-language.md`가 accepted된 뒤에 정해진다.
+- 서버 구현 언어는 Rust다(`docs/adr/0002-server-language.md`). libwebp FFI와 `unsafe`는 그 ADR의 "구현 조건"을 따른다.
