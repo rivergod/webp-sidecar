@@ -15,7 +15,7 @@ import org.w3c.dom.Node;
 /**
  * WebP 이미지(프레임) 메타데이터(ADR-0014). native 포맷은 {@link WebPImageMetadataFormat}, 표준 포맷
  * ({@code javax_imageio_1.0})은 TwelveMonkeys imageio-webp와 같은 노드(Chroma, Compression, Data, Dimension,
- * Document, Transparency)를 낸다. 수정할 수 있다(쓰기에는 durationMs만 쓴다). 스레드 안전하지 않다.
+ * Document, Transparency)를 낸다. 값이 TwelveMonkeys와 다른 경우는 docs/design/imageio-metadata.md §3에 있다. 수정할 수 있다(쓰기에는 durationMs만 쓴다). 스레드 안전하지 않다.
  */
 final class WebPImageMetadata extends IIOMetadata {
 
@@ -29,7 +29,13 @@ final class WebPImageMetadata extends IIOMetadata {
     int durationMs = DEFAULT_DURATION_MS;
     boolean alphaBlend = true;
     boolean disposeBackground;
+    /** 프레임 비트스트림의 알파(native {@code Frame/hasAlpha}). */
     boolean hasAlpha;
+    /**
+     * 애니메이션 프레임이면 true. {@code read(i)}는 투명으로 초기화한 캔버스에 합성한 ARGB 이미지를 돌려주므로(ADR-0014),
+     * 표준 포맷은 프레임 비트스트림과 상관없이 알파가 있는 이미지로 기술한다.
+     */
+    boolean canvasFrame;
     /** null이면 알 수 없음(쓰기용 기본 메타데이터). */
     Boolean lossless;
 
@@ -48,6 +54,7 @@ final class WebPImageMetadata extends IIOMetadata {
         m.alphaBlend = f.getBlend() != BlendMethod.BLEND_METHOD_NO_BLEND;
         m.disposeBackground = f.getDispose() == DisposeMethod.DISPOSE_METHOD_BACKGROUND;
         m.hasAlpha = f.getHasAlpha();
+        m.canvasFrame = true;
         m.lossless = f.getCompression() == Compression.COMPRESSION_LOSSLESS;
         return m;
     }
@@ -137,7 +144,13 @@ final class WebPImageMetadata extends IIOMetadata {
         alphaBlend = true;
         disposeBackground = false;
         hasAlpha = false;
+        canvasFrame = false;
         lossless = null;
+    }
+
+    /** 표준 포맷이 기술하는 이미지(= {@code read}가 돌려주는 이미지)에 알파가 있는지. */
+    private boolean imageHasAlpha() {
+        return hasAlpha || canvasFrame;
     }
 
     private static IIOMetadataNode node(String name, String attribute, String value) {
@@ -150,7 +163,7 @@ final class WebPImageMetadata extends IIOMetadata {
     protected IIOMetadataNode getStandardChromaNode() {
         IIOMetadataNode chroma = new IIOMetadataNode("Chroma");
         chroma.appendChild(node("ColorSpaceType", "name", "RGB"));
-        chroma.appendChild(node("NumChannels", "value", hasAlpha ? "4" : "3"));
+        chroma.appendChild(node("NumChannels", "value", imageHasAlpha() ? "4" : "3"));
         chroma.appendChild(node("BlackIsZero", "value", "TRUE"));
         return chroma;
     }
@@ -171,7 +184,7 @@ final class WebPImageMetadata extends IIOMetadata {
         IIOMetadataNode data = new IIOMetadataNode("Data");
         data.appendChild(node("PlanarConfiguration", "value", "PixelInterleaved"));
         data.appendChild(node("SampleFormat", "value", "UnsignedIntegral"));
-        data.appendChild(node("BitsPerSample", "value", hasAlpha ? "8 8 8 8" : "8 8 8"));
+        data.appendChild(node("BitsPerSample", "value", imageHasAlpha() ? "8 8 8 8" : "8 8 8"));
         return data;
     }
 
@@ -193,7 +206,7 @@ final class WebPImageMetadata extends IIOMetadata {
     @Override
     protected IIOMetadataNode getStandardTransparencyNode() {
         IIOMetadataNode transparency = new IIOMetadataNode("Transparency");
-        transparency.appendChild(node("Alpha", "value", hasAlpha ? "nonpremultiplied" : "none"));
+        transparency.appendChild(node("Alpha", "value", imageHasAlpha() ? "nonpremultiplied" : "none"));
         return transparency;
     }
 }
