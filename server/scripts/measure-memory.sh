@@ -1,6 +1,7 @@
 #!/bin/sh
 # 메모리 예산 측정(ADR-0012). 작업마다 새 컨테이너를 띄워 cgroup v2 memory.peak와 OOM 여부를 출력한다.
 # 사용: server/scripts/measure-memory.sh [메모리 제한, 기본 1g] [동시 요청 수, 기본 1] [변 픽셀, 기본 8192]
+# 작업 선택: OPS="decode-anim encode-anim" server/scripts/measure-memory.sh ...
 # 필요: Docker, cgroup v2, webp-imageio-server:dev 이미지(deploy/Dockerfile).
 set -eu
 MEM=${1:-1g}
@@ -10,7 +11,7 @@ SIDE=${3:-8192}
 SOCKDIR=$(mktemp -d /tmp/wpm.XXXXXX)
 cd "$(dirname "$0")/.."
 cargo test --release --test memory_budget --no-run >/dev/null 2>&1
-for OP in decode-lossless decode-lossy encode-lossless encode-lossy; do
+for OP in ${OPS:-decode-lossless decode-lossy encode-lossless encode-lossy decode-anim encode-anim}; do
   docker rm -f webp-mem >/dev/null 2>&1 || true
   docker run -d --name webp-mem --read-only --network none --cap-drop ALL --security-opt no-new-privileges \
     --memory "$MEM" --memory-swap "$MEM" --cpus 2 --user "$(id -u):$(id -g)" \

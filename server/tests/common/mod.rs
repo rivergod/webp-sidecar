@@ -245,3 +245,132 @@ pub fn psnr_rgb(a: &[u8], b: &[u8]) -> f64 {
         10.0 * (255.0f64 * 255.0 / (sum / n)).log10()
     }
 }
+
+/// DecodeAnimation 결과: 특성과 프레임(헤더, 픽셀) 목록.
+pub type Animation = (pb::ImageFeatures, Vec<(pb::FrameHeader, Vec<u8>)>);
+
+/// DecodeAnimation을 호출해 모든 프레임을 모은다.
+pub async fn decode_animation(client: &mut WebPServiceClient<Channel>, data: &[u8]) -> Result<Animation, Status> {
+    use pb::decode_animation_request::Payload as Req;
+    use pb::decode_animation_response::Payload as Resp;
+    let options = pb::DecodeAnimationOptions {
+        input_bytes: data.len() as u64,
+        pixel_format: pb::PixelFormat::Rgba8 as i32,
+        max_pixels: None,
+    };
+    let mut messages = vec![pb::DecodeAnimationRequest {
+        payload: Some(Req::Options(options)),
+    }];
+    messages.extend(chunks(data).into_iter().map(|c| pb::DecodeAnimationRequest {
+        payload: Some(Req::WebpData(c)),
+    }));
+    let mut stream = client
+        .decode_animation(tokio_stream::iter(messages))
+        .await?
+        .into_inner();
+    let mut features = None;
+    let mut frames: Vec<(pb::FrameHeader, Vec<u8>)> = Vec::new();
+    while let Some(message) = stream.next().await {
+        match message?.payload {
+            Some(Resp::Features(f)) => {
+                assert!(
+                    features.is_none() && frames.is_empty(),
+                    "features must come once, first"
+                );
+                features = Some(f);
+            }
+            Some(Resp::Frame(h)) => {
+                assert!(features.is_some(), "frame before features");
+                frames.push((h, Vec::new()));
+            }
+            Some(Resp::Pixels(p)) => frames.last_mut().expect("pixels before frame").1.extend_from_slice(&p),
+            None => panic!("response without payload"),
+        }
+    }
+    for (h, px) in &frames {
+        assert_eq!(h.pixel_bytes as usize, px.len(), "frame {} pixel_bytes", h.frame_index);
+    }
+    Ok((features.expect("missing features"), frames))
+}
+
+/// EncodeAnimation을 호출한다. 각 프레임은 (표시 시간 ms, 캔버스 RGBA8).
+pub async fn encode_animation(
+    client: &mut WebPServiceClient<Channel>,
+    options: pb::EncodeAnimationOptions,
+    frames: &[(u32, Vec<u8>)],
+) -> Result<Vec<u8>, Status> {
+    use pb::encode_animation_request::Payload as Req;
+    let mut messages = vec![pb::EncodeAnimationRequest {
+        payload: Some(Req::Options(options)),
+    }];
+    for (duration_ms, rgba) in frames {
+        messages.push(pb::EncodeAnimationRequest {
+            payload: Some(Req::Frame(pb::EncodeFrame {
+                duration_ms: *duration_ms,
+            })),
+        });
+        messages.extend(chunks(rgba).into_iter().map(|c| pb::EncodeAnimationRequest {
+            payload: Some(Req::Pixels(c)),
+        }));
+    }
+    encode_animation_raw(client, messages).await
+}
+
+/// 임의의 요청 메시지 목록으로 EncodeAnimation을 호출한다(프로토콜 위반 테스트용).
+pub async fn encode_animation_raw(
+    client: &mut WebPServiceClient<Channel>,
+    messages: Vec<pb::EncodeAnimationRequest>,
+) -> Result<Vec<u8>, Status> {
+    use pb::encode_animation_response::Payload as Resp;
+    let mut stream = client
+        .encode_animation(tokio_stream::iter(messages))
+        .await?
+        .into_inner();
+    let mut declared = None;
+    let mut out = Vec::new();
+    while let Some(message) = stream.next().await {
+        match message?.payload {
+            Some(Resp::Header(h)) => declared = Some(h.webp_bytes),
+            Some(Resp::WebpData(d)) => out.extend_from_slice(&d),
+            None => panic!("response without payload"),
+        }
+    }
+    assert_eq!(declared, Some(out.len() as u64));
+    Ok(out)
+}
+
+/// 메타데이터를 넣어 Encode를 호출한다.
+pub async fn encode_with_metadata(
+    client: &mut WebPServiceClient<Channel>,
+    pixels: &[u8],
+    width: u32,
+    height: u32,
+    metadata: pb::Metadata,
+) -> Result<Vec<u8>, Status> {
+    use pb::encode_request::Payload;
+    let options = pb::EncodeOptions {
+        width,
+        height,
+        pixel_format: pb::PixelFormat::Rgba8 as i32,
+        params: Some(pb::EncodeParams {
+            lossless: true,
+            quality: None,
+            method: None,
+        }),
+        metadata: Some(metadata),
+    };
+    let mut messages = vec![pb::EncodeRequest {
+        payload: Some(Payload::Options(options)),
+    }];
+    messages.extend(chunks(pixels).into_iter().map(|c| pb::EncodeRequest {
+        payload: Some(Payload::Pixels(c)),
+    }));
+    let mut stream = client.encode(tokio_stream::iter(messages)).await?.into_inner();
+    let mut out = Vec::new();
+    while let Some(message) = stream.next().await {
+        if let Some(pb::encode_response::Payload::WebpData(d)) = message?.payload {
+            out.extend_from_slice(&d);
+        }
+    }
+    Ok(out)
+}

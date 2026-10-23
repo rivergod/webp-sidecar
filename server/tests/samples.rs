@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::{TestServer, decode, decode_options, get_features};
+use common::{TestServer, decode, decode_animation, decode_options, get_features};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -163,12 +163,8 @@ async fn malformed_still_files_follow_libwebp_outcome() {
         match (expected["outcome"].as_str().unwrap(), result) {
             ("reject", Ok(_)) => failures.push(format!("{path}: accepted but libwebp rejects")),
             ("reject", Err(status)) => {
-                // 애니메이션 플래그가 켜진 파일은 DecodeAnimation 구현(Phase 3) 전까지 UNIMPLEMENTED도 허용한다.
-                let animated = expected["observed"]["features"]["has_animation"] == true;
                 let ok_codes: &[Code] = if over_limit {
                     &[Code::ResourceExhausted]
-                } else if animated {
-                    &[Code::InvalidArgument, Code::ResourceExhausted, Code::Unimplemented]
                 } else {
                     &[Code::InvalidArgument, Code::ResourceExhausted]
                 };
@@ -200,6 +196,121 @@ async fn malformed_still_files_follow_libwebp_outcome() {
         "{} of {} mismatched:\n{}",
         failures.len(),
         entries.len(),
+        failures.join("\n")
+    );
+}
+
+#[tokio::test]
+async fn generated_animations_decode_to_expected_frames() {
+    // given: 애니메이션 기대값(프레임별 합성 캔버스 RGBA8 SHA-256, WebPAnimDecoder MODE_RGBA)이 있는 파일
+    let server = TestServer::start().await;
+    let mut client = server.client().await;
+    let entries: Vec<Value> = manifest_files()
+        .into_iter()
+        .filter(|e| is_webp(e) && e["expected"]["animation"].is_object())
+        .collect();
+    assert!(
+        entries.len() >= 10,
+        "expected animation samples, found {}",
+        entries.len()
+    );
+
+    // when / then: 프레임 수, 프레임별 해시·표시 시간, 반복 횟수를 비교한다.
+    let mut failures = Vec::new();
+    for entry in &entries {
+        let (path, data) = read_sample(entry);
+        let want = &entry["expected"]["animation"];
+        let (features, frames) = match decode_animation(&mut client, &data).await {
+            Ok(r) => r,
+            Err(status) => {
+                failures.push(format!("{path}: {:?} {}", status.code(), status.message()));
+                continue;
+            }
+        };
+        let want_frames = want["frames"].as_array().unwrap();
+        if frames.len() != want_frames.len() {
+            failures.push(format!("{path}: {} frames, want {}", frames.len(), want_frames.len()));
+            continue;
+        }
+        for ((header, pixels), w) in frames.iter().zip(want_frames) {
+            if sha256_hex(pixels) != w["rgba_sha256"].as_str().unwrap()
+                || u64::from(header.duration_ms) != w["duration_ms"].as_u64().unwrap()
+            {
+                failures.push(format!("{path}: frame {} differs", header.frame_index));
+            }
+        }
+        let loop_count = features.animation.map(|a| a.loop_count);
+        if loop_count.map(u64::from) != want["loop_count"].as_u64() && want.get("loop_count").is_some() {
+            failures.push(format!(
+                "{path}: loop_count {loop_count:?}, want {}",
+                want["loop_count"]
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} mismatches:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}
+
+#[tokio::test]
+async fn malformed_animation_files_follow_libwebp_outcome() {
+    // given: 애니메이션 디코더 대상의 손상·악성 입력
+    let server = TestServer::start().await;
+    let mut client = server.client().await;
+    let entries: Vec<Value> = manifest_files()
+        .into_iter()
+        .filter(|e| {
+            e["path"].as_str().is_some_and(|p| p.starts_with("malformed/")) && e["expected"]["decoder"] == "anim"
+        })
+        .collect();
+    assert!(!entries.is_empty());
+
+    // when / then: libwebp(WebPAnimDecoder)가 거부한 파일은 서버도 거부한다. 받은 파일은 서버도 받는다.
+    // 서버는 상한(max_frames 등)을 추가로 적용하므로, 상한을 넘는 파일은 libwebp가 받아도 RESOURCE_EXHAUSTED가 맞다.
+    let mut failures = Vec::new();
+    let mut skipped = Vec::new();
+    for entry in &entries {
+        let (path, data) = read_sample(entry);
+        let expected = &entry["expected"];
+        let over_limit = expected["exceeds_default_limits"]
+            .as_array()
+            .is_some_and(|l| !l.is_empty());
+        // 출력량 폭탄(예: 4096² 캔버스 × 1000프레임 ≈ 64 GiB)은 기본 상한을 통과하므로 끝까지 받으면 테스트가
+        // 수십 GiB를 쓴다. 이런 파일은 건너뛰고 기록한다(출력량 상한은 Phase 5 검토 항목 — docs/research/0005).
+        let demux = &expected["observed"]["demux"];
+        let output_bytes = demux["canvas_width"].as_u64().unwrap_or(0)
+            * demux["canvas_height"].as_u64().unwrap_or(0)
+            * demux["frame_count"].as_u64().unwrap_or(0)
+            * 4;
+        if !over_limit && output_bytes > (1 << 30) {
+            skipped.push(format!("{path} ({} MiB of composited output)", output_bytes >> 20));
+            continue;
+        }
+        let result = decode_animation(&mut client, &data).await;
+        match (expected["outcome"].as_str().unwrap(), over_limit, result) {
+            (_, true, Err(s)) if s.code() == Code::ResourceExhausted => {}
+            (_, true, other) => failures.push(format!(
+                "{path}: over limit but got {:?}",
+                other.err().map(|s| s.code())
+            )),
+            ("reject", false, Err(s)) if matches!(s.code(), Code::InvalidArgument | Code::ResourceExhausted) => {}
+            ("accept", false, Ok(_)) => {}
+            (outcome, false, other) => failures.push(format!(
+                "{path}: libwebp {outcome}, server {:?}",
+                other.err().map(|s| (s.code(), s.message().to_string()))
+            )),
+        }
+    }
+    if !skipped.is_empty() {
+        eprintln!("skipped output bombs: {skipped:?}");
+    }
+    assert!(
+        failures.is_empty(),
+        "{} mismatches:\n{}",
+        failures.len(),
         failures.join("\n")
     );
 }

@@ -24,7 +24,24 @@ unsafe extern "C" {
 
     #[link_name = "WebPDecode"]
     fn decode_raw(data: *const u8, data_size: usize, config: *mut sys::WebPDecoderConfig) -> c_int;
+
+    #[link_name = "WebPMuxSetChunk"]
+    fn mux_set_chunk(
+        mux: *mut sys::WebPMux,
+        fourcc: *const std::ffi::c_char,
+        chunk_data: *const sys::WebPData,
+        copy_data: c_int,
+    ) -> c_int;
+
+    #[link_name = "WebPMuxAssemble"]
+    fn mux_assemble(mux: *mut sys::WebPMux, assembled_data: *mut sys::WebPData) -> c_int;
 }
+
+// WebPMuxError 값 (libwebp src/webp/mux.h).
+const WEBP_MUX_OK: c_int = 1;
+const WEBP_MUX_INVALID_ARGUMENT: c_int = -1;
+const WEBP_MUX_BAD_DATA: c_int = -2;
+const WEBP_MUX_MEMORY_ERROR: c_int = -3;
 
 // VP8StatusCode 값 (libwebp src/webp/decode.h).
 const VP8_STATUS_OK: c_int = 0;
@@ -631,6 +648,345 @@ pub fn metadata_chunks(data: &[u8], max_metadata_bytes: u64) -> Result<MetadataC
     Ok(chunks)
 }
 
+// --- 애니메이션 디코딩: 합성된 캔버스 프레임(WebPAnimDecoder) ---
+
+/// 애니메이션 전체 정보(WebPAnimDecoderGetInfo).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AnimInfo {
+    /// 캔버스 너비. 단위: 픽셀.
+    pub canvas_width: u32,
+    /// 캔버스 높이. 단위: 픽셀.
+    pub canvas_height: u32,
+    /// 반복 횟수. 0은 무한.
+    pub loop_count: u32,
+    /// 프레임 수.
+    pub frame_count: u32,
+}
+
+/// `WebPAnimDecoder`. 프레임마다 캔버스 전체를 합성해 RGBA8로 돌려준다(RFC 9649 §2.7.2의 합성, libwebp 동작을 따른다:
+/// ANIM 배경색을 무시하고 투명으로 초기화한다 — docs/research/0005).
+///
+/// 입력을 복사하지 않고 참조하므로 수명이 `data`에 묶인다. 캔버스 크기 버퍼 2개를 잡는다(docs/research/0007).
+/// 한 스레드에서만 쓴다.
+pub struct AnimDecoder<'a> {
+    ptr: std::ptr::NonNull<sys::WebPAnimDecoder>,
+    info: AnimInfo,
+    _data: std::marker::PhantomData<&'a [u8]>,
+}
+
+impl<'a> AnimDecoder<'a> {
+    /// 디코더를 만든다. 호출자는 캔버스 크기 상한을 먼저 검사해야 한다(디코더가 캔버스 버퍼를 바로 할당한다).
+    ///
+    /// 오류: 손상·잘림·애니메이션 구조 오류는 [`WebpError::InvalidData`].
+    pub fn new(data: &'a [u8]) -> Result<Self, WebpError> {
+        let mut opts = MaybeUninit::<sys::WebPAnimDecoderOptions>::zeroed();
+        // SAFETY: opts는 쓰기 가능하다. 0은 ABI 불일치다.
+        if unsafe { sys::WebPAnimDecoderOptionsInit(opts.as_mut_ptr()) } == 0 {
+            return Err(WebpError::Internal("WebPAnimDecoderOptionsInit: ABI mismatch".into()));
+        }
+        // SAFETY: Init 성공 후 초기화되어 있다.
+        let mut opts = unsafe { opts.assume_init() };
+        // ADR-0004: RGBA8 비-premultiplied.
+        opts.color_mode = sys::WEBP_CSP_MODE::MODE_RGBA;
+        opts.use_threads = 0;
+        let input = sys::WebPData {
+            bytes: data.as_ptr(),
+            size: data.len(),
+        };
+        // SAFETY: input은 data를 가리키고 디코더는 data보다 오래 살지 않는다(PhantomData 수명).
+        let ptr = unsafe { sys::WebPAnimDecoderNew(&input, &opts) };
+        let ptr = std::ptr::NonNull::new(ptr)
+            .ok_or_else(|| WebpError::InvalidData("WebPAnimDecoderNew: cannot parse animation".into()))?;
+        let mut raw = sys::WebPAnimInfo::default();
+        // SAFETY: ptr은 유효한 디코더다.
+        if unsafe { sys::WebPAnimDecoderGetInfo(ptr.as_ptr(), &mut raw) } == 0 {
+            // SAFETY: 위에서 만든 디코더다.
+            unsafe { sys::WebPAnimDecoderDelete(ptr.as_ptr()) };
+            return Err(WebpError::InvalidData("WebPAnimDecoderGetInfo failed".into()));
+        }
+        let info = AnimInfo {
+            canvas_width: raw.canvas_width,
+            canvas_height: raw.canvas_height,
+            loop_count: raw.loop_count,
+            frame_count: raw.frame_count,
+        };
+        Ok(Self {
+            ptr,
+            info,
+            _data: std::marker::PhantomData,
+        })
+    }
+
+    /// 애니메이션 정보.
+    pub fn info(&self) -> AnimInfo {
+        self.info
+    }
+
+    /// 다음 합성 프레임(캔버스 × 4바이트 RGBA8)과 그 프레임의 끝 시각(ms)을 돌려준다. 프레임이 더 없으면 `None`.
+    ///
+    /// 돌려준 버퍼는 디코더 소유이며 다음 호출 전까지만 유효하다(빌림으로 강제된다).
+    /// 오류: 프레임 비트스트림이 손상됐으면 [`WebpError::InvalidData`].
+    pub fn next_frame(&mut self) -> Result<Option<(&[u8], i32)>, WebpError> {
+        // SAFETY: ptr은 유효한 디코더다.
+        if unsafe { sys::WebPAnimDecoderHasMoreFrames(self.ptr.as_ptr()) } == 0 {
+            return Ok(None);
+        }
+        let mut buf: *mut u8 = std::ptr::null_mut();
+        let mut timestamp: c_int = 0;
+        // SAFETY: ptr은 유효하고 buf/timestamp는 쓰기 가능하다.
+        if unsafe { sys::WebPAnimDecoderGetNext(self.ptr.as_ptr(), &mut buf, &mut timestamp) } == 0 || buf.is_null() {
+            return Err(WebpError::InvalidData(
+                "WebPAnimDecoderGetNext: cannot decode frame".into(),
+            ));
+        }
+        let len = self.info.canvas_width as usize * self.info.canvas_height as usize * BYTES_PER_PIXEL;
+        // SAFETY: libwebp는 canvas_width × 4 × canvas_height 바이트 버퍼를 돌려준다(src/webp/demux.h).
+        // 버퍼는 &mut self 빌림 동안만 쓰이므로 다음 GetNext/Delete 전까지 유효하다.
+        Ok(Some((unsafe { std::slice::from_raw_parts(buf, len) }, timestamp)))
+    }
+}
+
+impl Drop for AnimDecoder<'_> {
+    fn drop(&mut self) {
+        // SAFETY: WebPAnimDecoderNew로 만든 디코더다.
+        unsafe { sys::WebPAnimDecoderDelete(self.ptr.as_ptr()) };
+    }
+}
+
+// --- 인코딩 결과에 메타데이터 넣기(WebPMux) ---
+
+fn mux_error(op: &str, code: c_int) -> WebpError {
+    match code {
+        WEBP_MUX_INVALID_ARGUMENT => WebpError::InvalidArgument(format!("{op}: invalid argument")),
+        WEBP_MUX_BAD_DATA => WebpError::InvalidData(format!("{op}: bad data")),
+        WEBP_MUX_MEMORY_ERROR => WebpError::OutOfMemory(format!("{op}: memory error")),
+        other => WebpError::Internal(format!("{op}: WebPMuxError {other}")),
+    }
+}
+
+/// WebP 파일에 ICCP/EXIF/XMP 청크를 넣는다(RFC 9649 §2.7.1.4, §2.7.1.5). 설정된 청크만 넣고, 하나도 없으면 그대로 돌려준다.
+/// WebPMux가 필요하면 VP8X 확장 형식으로 바꾼다.
+///
+/// 오류: 입력이 WebP가 아니면 [`WebpError::InvalidData`], 메모리 부족은 [`WebpError::OutOfMemory`].
+pub fn add_metadata(webp: Vec<u8>, metadata: &MetadataChunks) -> Result<Vec<u8>, WebpError> {
+    if metadata.icc_profile.is_none() && metadata.exif.is_none() && metadata.xmp.is_none() {
+        return Ok(webp);
+    }
+    let input = sys::WebPData {
+        bytes: webp.as_ptr(),
+        size: webp.len(),
+    };
+    // SAFETY: copy_data=1이라 mux가 입력을 복사한다. libwebp-sys에 WebPMuxCreate(inline)가 없어 *Internal로 부른다.
+    let mux = unsafe { sys::WebPMuxCreateInternal(&input, 1, sys::WEBP_MUX_ABI_VERSION as c_int) };
+    let mux = std::ptr::NonNull::new(mux).ok_or_else(|| WebpError::InvalidData("WebPMuxCreate failed".into()))?;
+    let result = (|| {
+        for (fourcc, payload) in [
+            (c"ICCP", &metadata.icc_profile),
+            (c"EXIF", &metadata.exif),
+            (c"XMP ", &metadata.xmp),
+        ] {
+            if let Some(bytes) = payload {
+                let chunk = sys::WebPData {
+                    bytes: bytes.as_ptr(),
+                    size: bytes.len(),
+                };
+                // SAFETY: mux는 유효하고, copy_data=1이라 청크 내용을 복사한다.
+                let code = unsafe { mux_set_chunk(mux.as_ptr(), fourcc.as_ptr(), &chunk, 1) };
+                if code != WEBP_MUX_OK {
+                    return Err(mux_error("WebPMuxSetChunk", code));
+                }
+            }
+        }
+        let mut out = sys::WebPData {
+            bytes: std::ptr::null(),
+            size: 0,
+        };
+        // SAFETY: mux는 유효하고 out은 쓰기 가능하다. 성공하면 out은 libwebp가 할당한 메모리다.
+        let code = unsafe { mux_assemble(mux.as_ptr(), &mut out) };
+        if code != WEBP_MUX_OK {
+            return Err(mux_error("WebPMuxAssemble", code));
+        }
+        let copied = copy_webp_data(&out);
+        // SAFETY: Assemble이 할당한 데이터다.
+        unsafe { sys::WebPDataClear(&mut out) };
+        copied
+    })();
+    // SAFETY: WebPMuxCreateInternal로 만든 mux다.
+    unsafe { sys::WebPMuxDelete(mux.as_ptr()) };
+    result
+}
+
+fn copy_webp_data(data: &sys::WebPData) -> Result<Vec<u8>, WebpError> {
+    if data.bytes.is_null() || data.size == 0 {
+        return Err(WebpError::Internal("libwebp produced no output".into()));
+    }
+    let mut out = Vec::new();
+    out.try_reserve_exact(data.size)
+        .map_err(|_| WebpError::OutOfMemory(format!("cannot allocate {} bytes for output", data.size)))?;
+    // SAFETY: bytes는 size 바이트 이상 유효하다(libwebp가 쓴 출력).
+    out.extend_from_slice(unsafe { std::slice::from_raw_parts(data.bytes, data.size) });
+    Ok(out)
+}
+
+// --- 애니메이션 인코딩(WebPAnimEncoder) ---
+
+/// `WebPAnimEncoder`. 캔버스 크기 RGBA8 프레임을 받아 프레임 간 차분과 부분 사각형은 libwebp가 계산한다.
+/// 한 스레드에서만 쓴다.
+pub struct AnimEncoder {
+    ptr: std::ptr::NonNull<sys::WebPAnimEncoder>,
+    width: u32,
+    height: u32,
+    config: sys::WebPConfig,
+    timestamp_ms: c_int,
+    frames: u32,
+}
+
+impl AnimEncoder {
+    /// 인코더를 만든다.
+    ///
+    /// `background_color_argb`는 0xAARRGGBB다. libwebp `WebPMuxAnimParams.bgcolor`도 같은 값이다
+    /// (파일에는 [B, G, R, A] 바이트 순서로 저장된다 — RFC 9649 §2.7.1.1).
+    /// 오류: 크기·품질이 범위 밖이면 [`WebpError::InvalidArgument`].
+    pub fn new(
+        width: u32,
+        height: u32,
+        loop_count: u32,
+        background_color_argb: u32,
+        params: &EncodeParams,
+    ) -> Result<Self, WebpError> {
+        check_dimensions(width, height)?;
+        if loop_count > u32::from(u16::MAX) {
+            return Err(WebpError::InvalidArgument(format!(
+                "loop_count must be <= 65535, got {loop_count}"
+            )));
+        }
+        let config = encoder_config(params)?;
+        let mut opts = MaybeUninit::<sys::WebPAnimEncoderOptions>::zeroed();
+        // SAFETY: opts는 쓰기 가능하다. libwebp-sys에 inline 헬퍼가 없어 *Internal로 부른다.
+        if unsafe { sys::WebPAnimEncoderOptionsInitInternal(opts.as_mut_ptr(), sys::WEBP_MUX_ABI_VERSION as c_int) }
+            == 0
+        {
+            return Err(WebpError::Internal("WebPAnimEncoderOptionsInit: ABI mismatch".into()));
+        }
+        // SAFETY: Init 성공 후 초기화되어 있다.
+        let mut opts = unsafe { opts.assume_init() };
+        opts.anim_params.loop_count = loop_count as c_int;
+        opts.anim_params.bgcolor = background_color_argb;
+        // SAFETY: opts는 초기화됐고 크기는 검증됐다.
+        let ptr = unsafe {
+            sys::WebPAnimEncoderNewInternal(
+                width as c_int,
+                height as c_int,
+                &opts,
+                sys::WEBP_MUX_ABI_VERSION as c_int,
+            )
+        };
+        let ptr =
+            std::ptr::NonNull::new(ptr).ok_or_else(|| WebpError::OutOfMemory("WebPAnimEncoderNew failed".into()))?;
+        Ok(Self {
+            ptr,
+            width,
+            height,
+            config,
+            timestamp_ms: 0,
+            frames: 0,
+        })
+    }
+
+    fn last_error(&self) -> String {
+        // SAFETY: ptr은 유효하다. 반환 문자열은 인코더 소유이며 바로 복사한다.
+        let msg = unsafe { sys::WebPAnimEncoderGetError(self.ptr.as_ptr()) };
+        if msg.is_null() {
+            return "unknown error".into();
+        }
+        // SAFETY: libwebp가 NUL 종료 문자열을 돌려준다.
+        unsafe { std::ffi::CStr::from_ptr(msg) }.to_string_lossy().into_owned()
+    }
+
+    /// 캔버스 크기 RGBA8 프레임 하나를 더한다.
+    ///
+    /// 오류: 크기가 맞지 않거나 누적 시간이 i32 ms를 넘으면 [`WebpError::InvalidArgument`].
+    pub fn add_frame(&mut self, rgba: &[u8], duration_ms: u32) -> Result<(), WebpError> {
+        if rgba.len() != rgba_len(self.width, self.height)? {
+            return Err(WebpError::InvalidArgument(format!(
+                "frame must be {}x{} RGBA ({} bytes), got {} bytes",
+                self.width,
+                self.height,
+                rgba_len(self.width, self.height)?,
+                rgba.len()
+            )));
+        }
+        let next = c_int::try_from(duration_ms)
+            .ok()
+            .and_then(|d| self.timestamp_ms.checked_add(d))
+            .ok_or_else(|| WebpError::InvalidArgument("total animation duration exceeds i32 milliseconds".into()))?;
+        // WebPAnimEncoder는 ARGB picture를 쓴다(src/webp/mux.h).
+        let mut pic = Picture::from_rgba(rgba, self.width, self.height, true)?;
+        // SAFETY: ptr·pic·config는 유효하다. timestamp는 프레임 시작 시각이다.
+        if unsafe { sys::WebPAnimEncoderAdd(self.ptr.as_ptr(), &mut pic.0, self.timestamp_ms, &self.config) } == 0 {
+            return Err(WebpError::Internal(format!(
+                "WebPAnimEncoderAdd: {}",
+                self.last_error()
+            )));
+        }
+        self.timestamp_ms = next;
+        self.frames += 1;
+        Ok(())
+    }
+
+    /// 지금까지 더한 프레임 수.
+    pub fn frame_count(&self) -> u32 {
+        self.frames
+    }
+
+    /// 인코딩을 끝내고 애니메이션 WebP 파일을 돌려준다.
+    ///
+    /// 오류: 프레임이 없으면 [`WebpError::InvalidArgument`].
+    pub fn finish(self) -> Result<Vec<u8>, WebpError> {
+        if self.frames == 0 {
+            return Err(WebpError::InvalidArgument("animation needs at least one frame".into()));
+        }
+        // 마지막 프레임의 끝 시각을 알린다(마지막 프레임 표시 시간이 정해진다).
+        // SAFETY: ptr은 유효하다. frame=NULL은 "더 이상 프레임 없음"을 뜻한다.
+        if unsafe {
+            sys::WebPAnimEncoderAdd(
+                self.ptr.as_ptr(),
+                std::ptr::null_mut(),
+                self.timestamp_ms,
+                std::ptr::null(),
+            )
+        } == 0
+        {
+            return Err(WebpError::Internal(format!(
+                "WebPAnimEncoderAdd(end): {}",
+                self.last_error()
+            )));
+        }
+        let mut out = sys::WebPData {
+            bytes: std::ptr::null(),
+            size: 0,
+        };
+        // SAFETY: ptr은 유효하고 out은 쓰기 가능하다.
+        if unsafe { sys::WebPAnimEncoderAssemble(self.ptr.as_ptr(), &mut out) } == 0 {
+            return Err(WebpError::Internal(format!(
+                "WebPAnimEncoderAssemble: {}",
+                self.last_error()
+            )));
+        }
+        let copied = copy_webp_data(&out);
+        // SAFETY: Assemble이 할당한 데이터다.
+        unsafe { sys::WebPDataClear(&mut out) };
+        copied
+    }
+}
+
+impl Drop for AnimEncoder {
+    fn drop(&mut self) {
+        // SAFETY: WebPAnimEncoderNewInternal로 만든 인코더다.
+        unsafe { sys::WebPAnimEncoderDelete(self.ptr.as_ptr()) };
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -795,5 +1151,105 @@ mod tests {
 
         // then
         assert!(matches!(err, WebpError::LimitExceeded(_)), "{err:?}");
+    }
+    #[test]
+    fn anim_decoder_three_frames_composites_canvas() {
+        // given
+        let mut dec = AnimDecoder::new(ANIM).unwrap();
+
+        // when
+        let mut firsts = Vec::new();
+        while let Some((canvas, _)) = dec.next_frame().unwrap() {
+            firsts.push([canvas[0], canvas[1], canvas[2], canvas[3]]);
+        }
+
+        // then: spikes/README.md의 3프레임(빨강, 초록, 반투명 파랑)
+        assert_eq!(dec.info().frame_count, 3);
+        assert_eq!(firsts, vec![[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 128]]);
+    }
+
+    #[test]
+    fn anim_encoder_lossless_frames_round_trip_with_loop_and_durations() {
+        // given
+        let frames: Vec<Vec<u8>> = (0..3u8)
+            .map(|i| (0..4 * 3 * 4).map(|j| (j as u8).wrapping_mul(i + 1)).collect())
+            .collect();
+        let params = EncodeParams {
+            lossless: true,
+            ..Default::default()
+        };
+        let mut enc = AnimEncoder::new(4, 3, 7, 0xFF11_2233, &params).unwrap();
+        for (i, f) in frames.iter().enumerate() {
+            enc.add_frame(f, 100 * (i as u32 + 1)).unwrap();
+        }
+
+        // when
+        let webp = enc.finish().unwrap();
+
+        // then
+        let info = container_info(&webp, 1000).unwrap();
+        assert_eq!(info.loop_count, 7);
+        assert_eq!(info.background_color_argb, 0xFF11_2233);
+        assert_eq!(
+            info.frames.iter().map(|f| f.duration_ms).collect::<Vec<_>>(),
+            vec![100, 200, 300]
+        );
+        let mut dec = AnimDecoder::new(&webp).unwrap();
+        for f in &frames {
+            assert_eq!(dec.next_frame().unwrap().unwrap().0, &f[..]);
+        }
+    }
+
+    #[test]
+    fn anim_encoder_wrong_frame_size_is_invalid_argument() {
+        // given
+        let mut enc = AnimEncoder::new(4, 3, 0, 0, &EncodeParams::default()).unwrap();
+
+        // when
+        let err = enc.add_frame(&[0; 4], 100).unwrap_err();
+
+        // then
+        assert!(matches!(err, WebpError::InvalidArgument(_)), "{err:?}");
+    }
+
+    #[test]
+    fn anim_encoder_no_frames_is_invalid_argument() {
+        // given
+        let enc = AnimEncoder::new(4, 3, 0, 0, &EncodeParams::default()).unwrap();
+
+        // when
+        let err = enc.finish().unwrap_err();
+
+        // then
+        assert!(matches!(err, WebpError::InvalidArgument(_)), "{err:?}");
+    }
+
+    #[test]
+    fn add_metadata_still_round_trips_payloads() {
+        // given
+        let pixels = vec![0x80u8; 4 * 4 * 4];
+        let webp = encode_still_rgba(
+            &pixels,
+            4,
+            4,
+            &EncodeParams {
+                lossless: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let meta = MetadataChunks {
+            icc_profile: Some(b"icc!".to_vec()),
+            exif: Some(b"II*\0exif".to_vec()),
+            xmp: Some(b"<x/>".to_vec()),
+        };
+
+        // when
+        let with_meta = add_metadata(webp, &meta).unwrap();
+
+        // then
+        assert_eq!(metadata_chunks(&with_meta, 1 << 20).unwrap(), meta);
+        let f = features(&with_meta).unwrap();
+        assert_eq!(decode_still_rgba(&with_meta, &f).unwrap(), pixels);
     }
 }

@@ -91,6 +91,12 @@ impl_input_message!(
     WebpData
 );
 impl_input_message!(
+    pb::DecodeAnimationRequest,
+    pb::decode_animation_request::Payload,
+    pb::DecodeAnimationOptions,
+    WebpData
+);
+impl_input_message!(
     pb::EncodeRequest,
     pb::encode_request::Payload,
     pb::EncodeOptions,
@@ -235,6 +241,18 @@ async fn send_chunks<T>(
     true
 }
 
+/// blocking 스레드에서 `data`를 `chunk` 바이트 이하 조각으로 복사해 보낸다. 채널이 차면 기다린다(흐름 제어).
+/// 수신 측이 떠나면 false.
+fn blocking_send_chunks<T>(
+    tx: &mpsc::Sender<Result<T, Status>>,
+    data: &[u8],
+    chunk: usize,
+    wrap: impl Fn(Bytes) -> T,
+) -> bool {
+    data.chunks(chunk)
+        .all(|c| tx.blocking_send(Ok(wrap(Bytes::copy_from_slice(c)))).is_ok())
+}
+
 // --- proto 변환 ---
 
 fn to_pb_compression(format: webp::Format, animated: bool) -> pb::Compression {
@@ -294,8 +312,29 @@ fn to_pb_metadata(m: webp::MetadataChunks) -> pb::Metadata {
     }
 }
 
-fn has_any_metadata(m: Option<&pb::Metadata>) -> bool {
-    m.is_some_and(|m| m.icc_profile.is_some() || m.exif.is_some() || m.xmp.is_some())
+fn to_webp_metadata(m: Option<&pb::Metadata>) -> webp::MetadataChunks {
+    m.map_or_else(webp::MetadataChunks::default, |m| webp::MetadataChunks {
+        icc_profile: m.icc_profile.as_ref().map(|b| b.to_vec()),
+        exif: m.exif.as_ref().map(|b| b.to_vec()),
+        xmp: m.xmp.as_ref().map(|b| b.to_vec()),
+    })
+}
+
+/// 넣을 메타데이터 합계가 상한 안인지 검사한다(docs/design/grpc-api.md §3).
+fn check_metadata_len(m: Option<&pb::Metadata>, limits: &Limits) -> Result<(), Status> {
+    let len: u64 = m.map_or(0, |m| {
+        [&m.icc_profile, &m.exif, &m.xmp]
+            .iter()
+            .map(|c| c.as_ref().map_or(0, |b| b.len() as u64))
+            .sum()
+    });
+    if len > limits.max_metadata_bytes {
+        return Err(Status::resource_exhausted(format!(
+            "metadata of {len} bytes exceeds max_metadata_bytes {}",
+            limits.max_metadata_bytes
+        )));
+    }
+    Ok(())
 }
 
 fn to_webp_params(p: Option<&pb::EncodeParams>) -> webp::EncodeParams {
@@ -323,6 +362,105 @@ fn frame_header(
         has_alpha,
         duration_ms,
     }
+}
+
+/// 프레임 하나가 캔버스 크기만큼 다 왔는지 검사한다.
+fn check_frame_complete(buf: &[u8], frame_bytes: usize) -> Result<(), Status> {
+    if buf.len() != frame_bytes {
+        return Err(Status::invalid_argument(format!(
+            "frame has {} bytes, expected {frame_bytes}",
+            buf.len()
+        )));
+    }
+    Ok(())
+}
+
+/// 애니메이션의 `frame_index`번째 합성 프레임을 보낸다. WebPAnimDecoder는 순차 합성만 지원하므로 0번부터 합성한다
+/// (docs/design/grpc-api.md §2.4). blocking 스레드에서 부른다.
+fn send_animation_frame(
+    data: &[u8],
+    frame_index: u32,
+    limits: &Limits,
+    tx: &mpsc::Sender<Result<pb::DecodeResponse, Status>>,
+) -> Result<(), Status> {
+    use pb::decode_response::Payload;
+    let info = webp::container_info(data, limits.max_frames).map_err(to_status)?;
+    let count = info.frames.len() as u32;
+    if frame_index >= count {
+        return Err(Status::out_of_range(format!(
+            "frame_index {frame_index} is out of range ({count} frames)"
+        )));
+    }
+    let mut decoder = webp::AnimDecoder::new(data).map_err(to_status)?;
+    let (width, height) = (decoder.info().canvas_width, decoder.info().canvas_height);
+    let mut index = 0;
+    while let Some((canvas, _)) = decoder.next_frame().map_err(to_status)? {
+        if index == frame_index {
+            let duration = info.frames[index as usize].duration_ms;
+            let header = frame_header(index, width, height, canvas.len(), true, duration);
+            if tx
+                .blocking_send(Ok(pb::DecodeResponse {
+                    payload: Some(Payload::Header(header)),
+                }))
+                .is_ok()
+            {
+                blocking_send_chunks(tx, canvas, limits.max_chunk_bytes as usize, |b| pb::DecodeResponse {
+                    payload: Some(Payload::Pixels(b)),
+                });
+            }
+            return Ok(());
+        }
+        index += 1;
+    }
+    Err(Status::invalid_argument(format!(
+        "animation ended after {index} of {count} frames"
+    )))
+}
+
+/// DecodeAnimation 응답을 보낸다: 특성 1개 → (프레임 헤더 → 픽셀 조각들) × 프레임 수. 정지 이미지는 프레임 1개.
+/// blocking 스레드에서 부른다. 클라이언트가 떠나면 조용히 끝낸다.
+fn stream_animation(
+    data: &[u8],
+    features: &webp::Features,
+    limits: &Limits,
+    tx: &mpsc::Sender<Result<pb::DecodeAnimationResponse, Status>>,
+) -> Result<(), Status> {
+    use pb::decode_animation_response::Payload;
+    let info = webp::container_info(data, limits.max_frames).map_err(to_status)?;
+    let chunk = limits.max_chunk_bytes as usize;
+    let send = |p: Payload| {
+        tx.blocking_send(Ok(pb::DecodeAnimationResponse { payload: Some(p) }))
+            .is_ok()
+    };
+    if !send(Payload::Features(to_pb_features(&info))) {
+        return Ok(());
+    }
+    if !features.has_animation {
+        let pixels = webp::decode_still_rgba(data, features).map_err(to_status)?;
+        let header = frame_header(0, features.width, features.height, pixels.len(), features.has_alpha, 0);
+        if send(Payload::Frame(header)) {
+            blocking_send_chunks(tx, &pixels, chunk, |b| pb::DecodeAnimationResponse {
+                payload: Some(Payload::Pixels(b)),
+            });
+        }
+        return Ok(());
+    }
+    let mut decoder = webp::AnimDecoder::new(data).map_err(to_status)?;
+    let (width, height) = (decoder.info().canvas_width, decoder.info().canvas_height);
+    let mut index = 0u32;
+    while let Some((canvas, _)) = decoder.next_frame().map_err(to_status)? {
+        let duration = info.frames.get(index as usize).map_or(0, |f| f.duration_ms);
+        let header = frame_header(index, width, height, canvas.len(), true, duration);
+        let sent = send(Payload::Frame(header))
+            && blocking_send_chunks(tx, canvas, chunk, |b| pb::DecodeAnimationResponse {
+                payload: Some(Payload::Pixels(b)),
+            });
+        if !sent {
+            return Ok(());
+        }
+        index += 1;
+    }
+    Ok(())
 }
 
 #[tonic::async_trait]
@@ -407,7 +545,16 @@ impl WebPService for WebpService {
         let features = webp::features(&data).map_err(to_status)?;
         check_canvas(&features, effective_max_pixels(&limits, options.max_pixels))?;
         if features.has_animation {
-            return Err(Status::unimplemented("decoding animated WebP is not implemented yet"));
+            // 애니메이션: frame_index번째 합성 프레임을 디코더 버퍼에서 바로 보낸다.
+            let (tx, rx) = mpsc::channel(RESPONSE_CHANNEL_DEPTH);
+            let frame_index = options.frame_index;
+            tokio::task::spawn_blocking(move || {
+                let _permit = permit;
+                if let Err(status) = send_animation_frame(&data, frame_index, &limits, &tx) {
+                    let _ = tx.blocking_send(Err(status));
+                }
+            });
+            return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
         }
         if options.frame_index != 0 {
             return Err(Status::out_of_range(format!(
@@ -445,9 +592,30 @@ impl WebPService for WebpService {
 
     async fn decode_animation(
         &self,
-        _request: Request<Streaming<pb::DecodeAnimationRequest>>,
+        request: Request<Streaming<pb::DecodeAnimationRequest>>,
     ) -> Result<Response<Self::DecodeAnimationStream>, Status> {
-        Err(Status::unimplemented("DecodeAnimation is not implemented yet"))
+        let limits = self.limits;
+        let mut stream = request.into_inner();
+        let (options, data, permit) = collect_input(
+            &mut stream,
+            limits.max_chunk_bytes,
+            &self.permits,
+            |o: &pb::DecodeAnimationOptions| check_input_bytes(o.input_bytes, &limits),
+        )
+        .await?;
+        check_pixel_format(options.pixel_format)?;
+        let features = webp::features(&data).map_err(to_status)?;
+        check_canvas(&features, effective_max_pixels(&limits, options.max_pixels))?;
+
+        // 특성 → (프레임 헤더 → 픽셀 조각들) × 프레임 수. 채널이 차면 디코딩이 멈추고, 클라이언트가 떠나면 끝낸다.
+        let (tx, rx) = mpsc::channel(RESPONSE_CHANNEL_DEPTH);
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            if let Err(status) = stream_animation(&data, &features, &limits, &tx) {
+                let _ = tx.blocking_send(Err(status));
+            }
+        });
+        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
     }
 
     async fn encode(
@@ -472,9 +640,7 @@ impl WebPService for WebpService {
                         o.width, o.height, limits.max_pixels
                     )));
                 }
-                if has_any_metadata(o.metadata.as_ref()) {
-                    return Err(Status::unimplemented("embedding metadata is not implemented yet"));
-                }
+                check_metadata_len(o.metadata.as_ref(), &limits)?;
                 webp::encoder_config(&to_webp_params(o.params.as_ref())).map_err(to_status)?;
                 Ok(pixel_count * webp::BYTES_PER_PIXEL as u64)
             },
@@ -486,8 +652,11 @@ impl WebPService for WebpService {
         tokio::spawn(async move {
             let _permit = permit;
             let params = to_webp_params(options.params.as_ref());
+            let metadata = to_webp_metadata(options.metadata.as_ref());
             let result = run_blocking(move || {
-                webp::encode_still_rgba(&pixels, options.width, options.height, &params).map_err(to_status)
+                let encoded =
+                    webp::encode_still_rgba(&pixels, options.width, options.height, &params).map_err(to_status)?;
+                webp::add_metadata(encoded, &metadata).map_err(to_status)
             })
             .await;
             match result {
@@ -517,9 +686,149 @@ impl WebPService for WebpService {
 
     async fn encode_animation(
         &self,
-        _request: Request<Streaming<pb::EncodeAnimationRequest>>,
+        request: Request<Streaming<pb::EncodeAnimationRequest>>,
     ) -> Result<Response<Self::EncodeAnimationStream>, Status> {
-        Err(Status::unimplemented("EncodeAnimation is not implemented yet"))
+        use pb::encode_animation_request::Payload;
+        let limits = self.limits;
+        let mut stream = request.into_inner();
+
+        // 첫 메시지(options)를 검증한다. 프레임 수는 미리 알 수 없으므로 받으면서 센다(proto 주석).
+        let first = stream
+            .message()
+            .await?
+            .ok_or_else(|| Status::invalid_argument("empty request stream: the first message must be options"))?;
+        let Some(Payload::Options(options)) = first.payload else {
+            return Err(Status::invalid_argument("the first message must be options"));
+        };
+        check_pixel_format(options.pixel_format)?;
+        let (width, height) = (options.canvas_width, options.canvas_height);
+        webp::check_dimensions(width, height).map_err(to_status)?;
+        let pixel_count = u64::from(width) * u64::from(height);
+        if pixel_count > limits.max_pixels {
+            return Err(Status::resource_exhausted(format!(
+                "canvas {width}x{height} = {pixel_count} pixels exceeds max_pixels {}",
+                limits.max_pixels
+            )));
+        }
+        check_metadata_len(options.metadata.as_ref(), &limits)?;
+        let params = to_webp_params(options.params.as_ref());
+        webp::encoder_config(&params).map_err(to_status)?;
+        let frame_bytes = (pixel_count * webp::BYTES_PER_PIXEL as u64) as usize;
+        let permit = self
+            .permits
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| Status::unavailable("server is shutting down"))?;
+
+        // 인코더는 blocking 작업 스레드가 가진다. 완성된 프레임을 받는 대로 넘긴다(입력 전체를 모으지 않는다).
+        let (frame_tx, mut frame_rx) = mpsc::channel::<(u32, Vec<u8>)>(1);
+        let metadata = to_webp_metadata(options.metadata.as_ref());
+        let (loop_count, background) = (options.loop_count, options.background_color_argb);
+        let worker = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, Status> {
+            let mut encoder =
+                webp::AnimEncoder::new(width, height, loop_count, background, &params).map_err(to_status)?;
+            while let Some((duration_ms, rgba)) = frame_rx.blocking_recv() {
+                encoder.add_frame(&rgba, duration_ms).map_err(to_status)?;
+            }
+            let encoded = encoder.finish().map_err(to_status)?;
+            webp::add_metadata(encoded, &metadata).map_err(to_status)
+        });
+
+        // 요청 스트림: (frame → pixels 조각들) × N. 순서와 프레임 크기를 검사한다.
+        let received: Result<(), Status> = async {
+            let mut current: Option<(u32, Vec<u8>)> = None;
+            let mut frames = 0u32;
+            loop {
+                let message = stream.message().await?;
+                let payload = match message {
+                    Some(m) => m.payload,
+                    None => break,
+                };
+                match payload {
+                    Some(Payload::Frame(frame)) => {
+                        if let Some(done) = current.take() {
+                            check_frame_complete(&done.1, frame_bytes)?;
+                            if frame_tx.send(done).await.is_err() {
+                                return Ok(()); // 작업 스레드가 먼저 실패했다. 결과에서 오류를 꺼낸다.
+                            }
+                        }
+                        frames += 1;
+                        if frames > limits.max_frames {
+                            return Err(Status::resource_exhausted(format!(
+                                "more than max_frames {} frames",
+                                limits.max_frames
+                            )));
+                        }
+                        let mut buf = Vec::new();
+                        buf.try_reserve_exact(frame_bytes)
+                            .map_err(|_| Status::resource_exhausted("cannot allocate a frame buffer"))?;
+                        current = Some((frame.duration_ms, buf));
+                    }
+                    Some(Payload::Pixels(chunk)) => {
+                        let Some((_, buf)) = current.as_mut() else {
+                            return Err(Status::invalid_argument("pixels must follow a frame message"));
+                        };
+                        if chunk.is_empty() || chunk.len() > limits.max_chunk_bytes as usize {
+                            return Err(Status::invalid_argument(format!(
+                                "chunk size must be 1..={} bytes, got {}",
+                                limits.max_chunk_bytes,
+                                chunk.len()
+                            )));
+                        }
+                        if buf.len() + chunk.len() > frame_bytes {
+                            return Err(Status::invalid_argument(format!(
+                                "frame has more than {frame_bytes} bytes ({width}x{height} RGBA)"
+                            )));
+                        }
+                        buf.extend_from_slice(&chunk);
+                    }
+                    Some(Payload::Options(_)) => {
+                        return Err(Status::invalid_argument(
+                            "options must be sent once, as the first message",
+                        ));
+                    }
+                    None => return Err(Status::invalid_argument("request message without payload")),
+                }
+            }
+            match current.take() {
+                Some(done) => {
+                    check_frame_complete(&done.1, frame_bytes)?;
+                    let _ = frame_tx.send(done).await;
+                    Ok(())
+                }
+                None => Err(Status::invalid_argument("animation needs at least one frame")),
+            }
+        }
+        .await;
+        drop(frame_tx);
+        let encoded = worker
+            .await
+            .map_err(|e| Status::internal(format!("worker task failed: {e}")));
+        // 요청 쪽 오류를 우선 알리고, 없으면 인코더 결과를 쓴다.
+        received?;
+        let encoded = encoded??;
+
+        // 헤더 → WebP 조각. 전송이 끝날 때까지 슬롯을 유지한다.
+        let (tx, rx) = mpsc::channel(RESPONSE_CHANNEL_DEPTH);
+        tokio::spawn(async move {
+            let _permit = permit;
+            let header = pb::EncodedHeader {
+                webp_bytes: encoded.len() as u64,
+            };
+            let header = pb::EncodeAnimationResponse {
+                payload: Some(pb::encode_animation_response::Payload::Header(header)),
+            };
+            if tx.send(Ok(header)).await.is_ok() {
+                send_chunks(&tx, Bytes::from(encoded), limits.max_chunk_bytes as usize, |b| {
+                    pb::EncodeAnimationResponse {
+                        payload: Some(pb::encode_animation_response::Payload::WebpData(b)),
+                    }
+                })
+                .await;
+            }
+        });
+        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
     }
 }
 

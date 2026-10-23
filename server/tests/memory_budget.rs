@@ -3,13 +3,14 @@
 //!
 //! 환경변수
 //! - `WEBP_IMAGEIO_TEST_UDS`: 서버 소켓 경로(필수)
-//! - `WEBP_IMAGEIO_TEST_OP`: decode-lossless | decode-lossy | encode-lossless | encode-lossy
+//! - `WEBP_IMAGEIO_TEST_OP`: decode-lossless | decode-lossy | encode-lossless | encode-lossy | decode-anim | encode-anim
+//!   (애니메이션은 lossless 3프레임)
 //! - `WEBP_IMAGEIO_TEST_SIDE`: 정사각형 한 변 픽셀 수(기본 8192)
 //! - `WEBP_IMAGEIO_TEST_CONCURRENT`: 동시에 보낼 요청 수(기본 1)
 
 mod common;
 
-use common::{channel_at, decode, decode_options, encode, pattern};
+use common::{channel_at, decode, decode_animation, decode_options, encode, encode_animation, pattern};
 use webp_imageio_server::proto as pb;
 use webp_imageio_server::proto::web_p_service_client::WebPServiceClient;
 use webp_imageio_server::webp;
@@ -29,13 +30,20 @@ async fn memory_budget_worst_case_operation_completes() {
     let side: u32 = env_or("WEBP_IMAGEIO_TEST_SIDE", "8192").parse().unwrap();
     let concurrent: usize = env_or("WEBP_IMAGEIO_TEST_CONCURRENT", "1").parse().unwrap();
     let pixels = pattern(side, side, true);
-    let lossless = op.ends_with("lossless");
+    let lossless = op.ends_with("lossless") || op.ends_with("anim");
     let params = webp::EncodeParams {
         lossless,
         quality: None,
         method: None,
     };
-    let input = if op.starts_with("decode") {
+    let input = if op == "decode-anim" {
+        // 단색 3프레임 애니메이션(압축 입력은 작고, 합성 캔버스는 최대 크기).
+        let mut enc = webp::AnimEncoder::new(side, side, 0, 0, &params).unwrap();
+        for v in [0x20u8, 0x80, 0xE0] {
+            enc.add_frame(&vec![v; pixels.len()], 100).unwrap();
+        }
+        enc.finish().unwrap()
+    } else if op.starts_with("decode") {
         // 디코딩 입력은 max_input_bytes(64 MiB) 안에 들어야 하므로 압축이 잘 되는 단색 이미지를 쓴다.
         let flat = vec![0x80u8; pixels.len()];
         webp::encode_still_rgba(&flat, side, side, &params).unwrap()
@@ -49,7 +57,25 @@ async fn memory_budget_worst_case_operation_completes() {
         let (socket, op, pixels, input) = (socket.clone(), op.clone(), pixels.clone(), input.clone());
         tasks.push(tokio::spawn(async move {
             let mut client = WebPServiceClient::new(channel_at(socket).await);
-            if op.starts_with("decode") {
+            if op == "decode-anim" {
+                decode_animation(&mut client, &input).await.map(|_| ())
+            } else if op == "encode-anim" {
+                let options = pb::EncodeAnimationOptions {
+                    canvas_width: side,
+                    canvas_height: side,
+                    pixel_format: pb::PixelFormat::Rgba8 as i32,
+                    loop_count: 0,
+                    background_color_argb: 0,
+                    params: Some(pb::EncodeParams {
+                        lossless: true,
+                        quality: None,
+                        method: None,
+                    }),
+                    metadata: None,
+                };
+                let frames: Vec<(u32, Vec<u8>)> = (0..3).map(|_| (100, pixels.clone())).collect();
+                encode_animation(&mut client, options, &frames).await.map(|_| ())
+            } else if op.starts_with("decode") {
                 decode(&mut client, &input, decode_options(&input)).await.map(|_| ())
             } else {
                 let p = pb::EncodeParams {
