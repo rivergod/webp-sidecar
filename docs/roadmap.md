@@ -8,7 +8,7 @@
 | Phase 1 | 서버: 정지 이미지 디코딩/인코딩 + 헬스체크 + Docker | 완료 (2026-10-23) |
 | Phase 2 | JVM SPI 클라이언트(정지 이미지) + 통합 테스트 | 완료 (2026-10-23) |
 | Phase 3 | 애니메이션 + ICC/EXIF/XMP | 완료 (2026-10-23) |
-| Phase 4 | JMH 벤치마크 + 결과 보고서 | 대기 |
+| Phase 4 | JMH 벤치마크 + 결과 보고서 | 완료 (2026-10-23, JDeli는 요청 시) |
 | Phase 5 | 보안 강화(seccomp, 퍼징) + proto 회고 | 대기 |
 
 ## Phase 0: 기반 정리
@@ -75,15 +75,15 @@
 
 완료 기준:
 
-- [ ] 같은 샘플로 이 플러그인(UDS, TCP), TwelveMonkeys, darkxanter, libwebp Wasm + Chicory(ADR-0001의 경쟁 대안)를 비교한다.
+- [x] 같은 샘플로 이 플러그인(UDS, TCP), TwelveMonkeys, darkxanter, libwebp Wasm + Chicory(ADR-0001의 경쟁 대안)를 비교한다. — 결과: [research/0009](research/0009-benchmark-results.md). 비교 대상들이 같은 이미지를 내는지 먼저 검증했다(bench/src/test)
 - [ ] 결정자가 JDeli 트라이얼을 확보해 요청하면 비교에 포함한다. 트라이얼은 업무용 이메일 등록이 필요하고 평가(비운영) 용도로만 쓸 수 있으며, 만료일이 있다. 결과를 저장소 밖에 공개하기 전에 트라이얼 라이선스 파일에서 벤치마크 공개 조건을 확인한다(공개 자료로는 미확인).
-- [ ] 측정 조건은 [ADR-0015](adr/0015-benchmark-method.md)를 따른다(JMH 설정, 서버 컨테이너 제한, 기본 SIMD 빌드와 AVX2 빌드 모두 측정).
-- [ ] 결과를 기본 SIMD 빌드 기준으로 [ADR-0011](adr/0011-hypothesis-criteria.md)의 기준(1024×768 이상 디코딩에서 TwelveMonkeys의 3배 이상, JNI의 50% 이상)으로 판정한다.
-- [ ] libwebp를 Wasm으로 빌드해 Chicory로 실행하는 비교 구현을 `bench/`에 둔다(벤치 전용, 제품 코드 아님). 사용한 libwebp 버전과 Wasm 빌드 옵션(SIMD, 스레드)을 기록한다.
-- [ ] 이미지 크기별(작음/중간/4K 이상), 종류별(lossy/lossless/alpha/애니메이션)로 측정한다.
-- [ ] 벤치마크를 한 명령으로 재현할 수 있고, 환경(CPU, OS, JDK, libwebp 버전, JMH 설정)이 결과와 함께 기록된다.
-- [ ] 결과 보고서를 `docs/research/`에 쓰고, 벤더 공개 수치([research/0001](research/0001-java-webp-landscape.md))와 비교한다.
-- [ ] 청크 크기, 전송 방식(UDS/TCP), 픽셀 변환 비용에 대한 결론을 ADR-0003/0004의 확인 방법에 맞춰 적는다.
+- [x] 측정 조건은 [ADR-0015](adr/0015-benchmark-method.md)를 따른다(JMH 설정, 서버 컨테이너 제한, 기본 SIMD 빌드와 AVX2 빌드 모두 측정). — 추가로 JVM과 서버를 서로 다른 P코어에 고정했다(하이브리드 CPU)
+- [x] 결과를 기본 SIMD 빌드 기준으로 [ADR-0011](adr/0011-hypothesis-criteria.md)의 기준(1024×768 이상 디코딩에서 TwelveMonkeys의 3배 이상, JNI의 50% 이상)으로 판정한다. — **18개 조건 중 12개 충족.** 대 TwelveMonkeys는 모두 충족(3.2–4.9배). 대 JNI는 사진 lossy·alpha의 M/L/XL 6개 조건이 미달(0.36–0.45). Phase 5 회고 ADR의 입력
+- [x] libwebp를 Wasm으로 빌드해 Chicory로 실행하는 비교 구현을 `bench/`에 둔다(벤치 전용, 제품 코드 아님). 사용한 libwebp 버전과 Wasm 빌드 옵션(SIMD, 스레드)을 기록한다. — [bench/wasm/README.md](../bench/wasm/README.md)(libwebp 1.6.0, wasi-sdk 34, SIMD·스레드 없음)
+- [x] 이미지 크기별(작음/중간/4K 이상), 종류별(lossy/lossless/alpha/애니메이션)로 측정한다. — XS–XL(4000×3000), 사진과 합성, 애니메이션 12프레임
+- [x] 벤치마크를 한 명령으로 재현할 수 있고, 환경(CPU, OS, JDK, libwebp 버전, JMH 설정)이 결과와 함께 기록된다. — `bench/run.sh`, 결과 `bench/results/2026-10-23-phase4/environment.txt`
+- [x] 결과 보고서를 `docs/research/`에 쓰고, 벤더 공개 수치([research/0001](research/0001-java-webp-landscape.md))와 비교한다. — [research/0009](research/0009-benchmark-results.md)
+- [x] 청크 크기, 전송 방식(UDS/TCP), 픽셀 변환 비용에 대한 결론을 ADR-0003/0004의 확인 방법에 맞춰 적는다. — research/0009 "ADR-0003/0004 확인 방법에 대한 결론". 측정 중 서버 TCP_NODELAY 누락(요청마다 약 40 ms)을 찾아 고쳤다
 
 ## 첫 배포 전 결정
 
@@ -101,4 +101,4 @@
 - [ ] 서버 입력 경로(Decode, GetFeatures, DecodeAnimation) 퍼저를 만들고 실행 결과(시간, 발견 사항)를 기록한다.
 - [ ] 출력량 폭탄 대응을 정한다: 4096² 캔버스 × 1,000프레임 파일은 기본 상한을 모두 통과하지만 합성 출력이 약 64 GiB다(research/0005). 총 출력 픽셀 상한 같은 방안을 ADR로 제안한다.
 - [ ] 컨테이너 제한(메모리/CPU, read-only, 네트워크 차단, non-root)이 실제로 적용됐는지 검증한다.
-- [ ] proto 회고 ADR(계속/중단 판단과 근거)을 `proposed`로 작성한다.
+- [ ] proto 회고 ADR(계속/중단 판단과 근거)을 `proposed`로 작성한다. Phase 4 미달 조건(대 JNI, 사진 lossy·alpha)과 개선 후보([research/0009](research/0009-benchmark-results.md) "Phase 5 회고에 넘길 것": 서버 할당자, GetFeatures 왕복 제거, 클라이언트 경로, 픽셀 포맷 ABGR8/RGB8, SIMD 런타임 분기)를 입력으로 한다.
