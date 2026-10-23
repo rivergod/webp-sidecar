@@ -26,3 +26,35 @@ pub async fn router(service: service::WebpService) -> tonic::transport::server::
         .add_service(health)
         .add_service(WebPServiceServer::new(service))
 }
+
+/// TCP 리스너를 tonic incoming으로 감싼다(ADR-0003 TCP 옵션). 받은 연결마다 `TCP_NODELAY`를 켠다.
+///
+/// tonic은 직접 넘긴 incoming에는 소켓 옵션을 걸지 않는다. Nagle 알고리즘이 켜져 있으면 응답의 작은 HTTP/2 프레임
+/// (헤더, 트레일러)이 클라이언트의 지연 ACK를 기다려 요청마다 약 40 ms가 늦어진다(Phase 4 벤치에서 발견).
+pub fn tcp_incoming(listener: tokio::net::TcpListener) -> tonic::transport::server::TcpIncoming {
+    tonic::transport::server::TcpIncoming::from(listener).with_nodelay(Some(true))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio_stream::StreamExt;
+
+    #[tokio::test]
+    async fn tcp_incoming_accepted_connection_has_nodelay() {
+        // Arrange
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let mut incoming = tcp_incoming(listener);
+        let _client = tokio::net::TcpStream::connect(addr).await.unwrap();
+
+        // Act
+        let accepted = incoming.next().await.unwrap().unwrap();
+
+        // Assert
+        assert!(
+            accepted.nodelay().unwrap(),
+            "TCP_NODELAY must be set on accepted connections"
+        );
+    }
+}

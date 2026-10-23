@@ -6,10 +6,10 @@ use std::path::Path;
 use std::process::ExitCode;
 use tokio::net::{TcpListener, UnixListener};
 use tokio::sync::watch;
-use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
+use tokio_stream::wrappers::UnixListenerStream;
 use webp_imageio_server::config::{Cli, Config};
-use webp_imageio_server::router;
 use webp_imageio_server::service::WebpService;
+use webp_imageio_server::{router, tcp_incoming};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -61,7 +61,7 @@ async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
                 let listener = TcpListener::bind(addr).await?;
                 router(service.clone())
                     .await
-                    .serve_with_incoming_shutdown(TcpListenerStream::new(listener), wait_for_stop(stop_rx.clone()))
+                    .serve_with_incoming_shutdown(tcp_incoming(listener), wait_for_stop(stop_rx.clone()))
                     .await?;
             }
             None => wait_for_stop(stop_rx.clone()).await,
