@@ -62,6 +62,8 @@ docs/
 | [0006](adr/0006-test-samples.md) | 테스트 샘플 세트 구성과 라이선스 | accepted |
 | [0007](adr/0007-agent-glue.md) | AI 에이전트 규칙: AGENTS.md 단일 원본 + 얇은 연결 파일 | accepted |
 | [0008](adr/0008-libwebp-version-pinning.md) | libwebp 버전 고정: 최신 릴리스 태그 + main 미릴리스 수정 추적 | accepted |
+| [0009](adr/0009-license.md) | 프로젝트 라이선스: Apache-2.0 | proposed |
+| [0010](adr/0010-maven-coordinates.md) | Maven 좌표: `net.rivergod:webp-imageio-external-server-proto` | accepted |
 
 ### 조사
 
@@ -70,6 +72,7 @@ docs/
 - [research/0003-server-language-rust-vs-go.md](research/0003-server-language-rust-vs-go.md) — 서버 언어 비교 + 스파이크 결과
 - [research/0004-jdk-baseline.md](research/0004-jdk-baseline.md) — JDK 최소 버전, Spring 지원 현황, Java vs Kotlin, 빌드 도구
 - [research/0005-test-samples.md](research/0005-test-samples.md) — 테스트 샘플 후보, 라이선스, RFC 9649 절 대응표
+- [research/0006-license.md](research/0006-license.md) — 라이선스 후보, 의존성 라이선스와 호환성
 
 ### 작업 규칙
 
