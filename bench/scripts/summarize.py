@@ -55,9 +55,10 @@ def load(results: Path) -> list[dict]:
     return rows
 
 
-def find(rows, benchmark, **params):
+def find(rows, benchmark, suite=None, **params):
+    """조건에 맞는 첫 측정. suite를 주면 그 묶음(JSON 파일)에서만 찾는다 — 비교는 같은 실행 안에서 한다."""
     for r in rows:
-        if r["benchmark"] != benchmark:
+        if r["benchmark"] != benchmark or (suite is not None and r["suite"] != suite):
             continue
         if all(r["params"].get(k) == v for k, v in params.items()):
             return r
@@ -109,10 +110,10 @@ def decode_section(rows) -> list[str]:
         for mode in MODES:
             for size in SIZES:
                 p = dict(content=content, size=size, mode=mode)
-                sc = find(rows, "DecodeBenchmark.decode", impl="SIDECAR", server="sse2-uds", **p)
-                tm = find(rows, "DecodeBenchmark.decode", impl="TWELVEMONKEYS", **p)
-                dx = find(rows, "DecodeBenchmark.decode", impl="DARKXANTER", **p)
-                wa = find(rows, "DecodeBenchmark.decode", impl="WASM", **p)
+                sc = find(rows, "DecodeBenchmark.decode", "decode", impl="SIDECAR", server="sse2-uds", **p)
+                tm = find(rows, "DecodeBenchmark.decode", "decode", impl="TWELVEMONKEYS", **p)
+                dx = find(rows, "DecodeBenchmark.decode", "decode", impl="DARKXANTER", **p)
+                wa = find(rows, "DecodeBenchmark.decode", "decode", impl="WASM", **p)
                 if not any([sc, tm, dx, wa]):
                     continue
                 rt, rj, rw = ratio(sc, tm), ratio(sc, dx), ratio(sc, wa)
@@ -144,14 +145,15 @@ def decode_section(rows) -> list[str]:
 
 def servers_section(rows) -> list[str]:
     out = ["## 전송 방식과 SIMD 빌드 (사이드카, photo, ops/s)", "",
+           "세 서버를 같은 묶음(decode-servers) 안에서 잰 값끼리 비교한다.", "",
            "| 모드 | 크기 | sse2-uds | sse2-tcp | avx2-uds | TCP/UDS | AVX2/SSE2 |", "|---|---|---|---|---|---|---|"]
     any_row = False
     for mode in MODES:
         for size in SIZES:
             p = dict(impl="SIDECAR", content="photo", size=size, mode=mode)
-            u = find(rows, "DecodeBenchmark.decode", server="sse2-uds", **p)
-            t = find(rows, "DecodeBenchmark.decode", server="sse2-tcp", **p)
-            a = find(rows, "DecodeBenchmark.decode", server="avx2-uds", **p)
+            u = find(rows, "DecodeBenchmark.decode", "decode-servers", server="sse2-uds", **p)
+            t = find(rows, "DecodeBenchmark.decode", "decode-servers", server="sse2-tcp", **p)
+            a = find(rows, "DecodeBenchmark.decode", "decode-servers", server="avx2-uds", **p)
             if not (t or a):
                 continue
             any_row = True
@@ -161,13 +163,13 @@ def servers_section(rows) -> list[str]:
 
 
 def chunk_section(rows) -> list[str]:
-    out = ["## 응답 조각 크기 (사이드카 UDS, photo, ops/s)", "",
+    out = ["## 응답 조각 크기 (사이드카 UDS, photo, ops/s)", "", "네 조각 크기를 같은 묶음(decode-chunk) 안에서 잰 값끼리 비교한다.", "",
            "| 모드 | 크기 | 256 KiB | 512 KiB | 1 MiB (기본) | 2 MiB |", "|---|---|---|---|---|---|"]
     any_row = False
     for mode in MODES:
         for size in SIZES:
             p = dict(impl="SIDECAR", content="photo", size=size, mode=mode)
-            cells = [find(rows, "DecodeBenchmark.decode", server=s, **p)
+            cells = [find(rows, "DecodeBenchmark.decode", "decode-chunk", server=s, **p)
                      for s in ("sse2-uds-256k", "sse2-uds-512k", "sse2-uds", "sse2-uds-2m")]
             if not (cells[0] or cells[1] or cells[3]):
                 continue
@@ -187,7 +189,7 @@ def wasm_interp_section(rows) -> list[str]:
             if not i:
                 continue
             any_row = True
-            c = find(rows, "DecodeBenchmark.decode", impl="WASM", **p)
+            c = find(rows, "DecodeBenchmark.decode", "decode", impl="WASM", **p)
             out.append(f"| {mode} | {size} | {ops(i)} | {ops(c)} | {fmt_ratio(ratio(c, i))} |")
     return out + [""] if any_row else []
 
@@ -221,7 +223,7 @@ def breakdown_section(rows, decode_time: dict[str, float]) -> list[str]:
     any_row = False
     for mode in MODES:
         for size in SIZES:
-            total = find(rows, "DecodeBenchmark.decode", impl="SIDECAR", server="sse2-uds", content="photo",
+            total = find(rows, "DecodeBenchmark.decode", "decode", impl="SIDECAR", server="sse2-uds", content="photo",
                          size=size, mode=mode)
             dec = find(rows, "TransportBenchmark.decode", server="sse2-uds", content="photo", size=size, mode=mode)
             feat = find(rows, "TransportBenchmark.getFeatures", server="sse2-uds", content="photo", size=size,

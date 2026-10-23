@@ -1,4 +1,4 @@
 # JMH 원시 출력(JSON, 로그)은 커밋하지 않는다. 요약(summary.md), CSV, 환경, 검증 표만 커밋한다.
 results/**/*.json
 results/**/*.txt
-!results/**/environment.txt
+!results/**/environment*.txt

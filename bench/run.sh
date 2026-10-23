@@ -146,8 +146,9 @@ record_environment() {
 suite_args() {
   case "$1" in
     decode) echo '\.DecodeBenchmark\. -p impl=SIDECAR,TWELVEMONKEYS,DARKXANTER,WASM -p server=sse2-uds' ;;
-    decode-servers) echo '\.DecodeBenchmark\. -p impl=SIDECAR -p server=sse2-tcp,avx2-uds -p content=photo' ;;
-    decode-chunk) echo '\.DecodeBenchmark\. -p impl=SIDECAR -p server=sse2-uds-256k,sse2-uds-512k,sse2-uds-2m -p content=photo -p size=M,L,XL -p mode=lossy,lossless' ;;
+    # 비교 기준(sse2-uds)을 같은 묶음에 넣는다. 다른 묶음의 값과 비교하면 시간에 따른 흔들림이 섞인다.
+    decode-servers) echo '\.DecodeBenchmark\. -p impl=SIDECAR -p server=sse2-uds,sse2-tcp,avx2-uds -p content=photo' ;;
+    decode-chunk) echo '\.DecodeBenchmark\. -p impl=SIDECAR -p server=sse2-uds-256k,sse2-uds-512k,sse2-uds,sse2-uds-2m -p content=photo -p size=M,L,XL -p mode=lossy,lossless' ;;
     decode-wasm-interp) echo '\.DecodeBenchmark\. -p impl=WASM_INTERPRETER -p content=photo -p size=XS,S,M' ;;
     transport) echo '\.TransportBenchmark\.decode$ -p server=sse2-uds,sse2-tcp -p mode=lossy,lossless' ;;
     features) echo '\.TransportBenchmark\.getFeatures$ -p server=sse2-uds -p mode=lossy,lossless' ;;
