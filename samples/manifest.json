@@ -22,11 +22,22 @@
     },
     {
       "committed": false,
-      "dest": "bench/",
+      "dest": "bench/synthetic/",
       "fetch": "python3 -I samples/scripts/bench_synth.py",
       "license": "Apache-2.0",
       "name": "synthetic benchmark set",
-      "notes": "합성 그래디언트+노이즈. 사진 샘플은 Phase 4에서 추가한다(public domain/CC0만, 내려받아 sha256 고정)."
+      "notes": "합성 그래디언트+노이즈. 사진 세트와 함께 쓴다(ADR-0015)."
+    },
+    {
+      "committed": false,
+      "dest": "bench/photo/",
+      "fetch": "bench/run.sh inputs",
+      "license": "public domain (NASA)",
+      "lock": "bench.lock.json",
+      "name": "Space Shuttle Columbia launching (NASA)",
+      "notes": "6084x6084 JPEG을 받아 sha256을 확인하고, 자르고 줄여(PhotoSources) bench_synth.py와 같은 cwebp 옵션으로 인코딩한다(bench_photo.py). 애니메이션 1개(12프레임 팬)를 포함한다.",
+      "pin": "원본 JPEG sha256: `bench.lock.json`",
+      "url": "https://commons.wikimedia.org/wiki/File:Space_Shuttle_Columbia_launching.jpg"
     }
   ],
   "files": [

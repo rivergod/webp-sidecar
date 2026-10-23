@@ -48,11 +48,23 @@ CONFORMANCE = {
 }
 BENCH = {
     "name": "synthetic benchmark set",
-    "dest": "bench/",
+    "dest": "bench/synthetic/",
     "license": sl.SELF_LICENSE,
     "committed": False,
     "fetch": "python3 -I samples/scripts/bench_synth.py",
-    "notes": "합성 그래디언트+노이즈. 사진 샘플은 Phase 4에서 추가한다(public domain/CC0만, 내려받아 sha256 고정).",
+    "notes": "합성 그래디언트+노이즈. 사진 세트와 함께 쓴다(ADR-0015).",
+}
+BENCH_PHOTO = {
+    "name": "Space Shuttle Columbia launching (NASA)",
+    "url": "https://commons.wikimedia.org/wiki/File:Space_Shuttle_Columbia_launching.jpg",
+    "dest": "bench/photo/",
+    "lock": "bench.lock.json",
+    "pin": "원본 JPEG sha256: `bench.lock.json`",
+    "license": "public domain (NASA)",
+    "committed": False,
+    "fetch": "bench/run.sh inputs",
+    "notes": "6084x6084 JPEG을 받아 sha256을 확인하고, 자르고 줄여(PhotoSources) bench_synth.py와 같은 cwebp 옵션으로 "
+             "인코딩한다(bench_photo.py). 애니메이션 1개(12프레임 팬)를 포함한다.",
 }
 
 
@@ -88,7 +100,7 @@ def header() -> dict:
         },
         "policy": {"max_file_bytes": sl.MAX_FILE_BYTES, "max_total_bytes": sl.MAX_TOTAL_BYTES,
                    "allowed_licenses": sorted(ALLOWED_LICENSES)},
-        "external": [CONFORMANCE, BENCH],
+        "external": [CONFORMANCE, BENCH, BENCH_PHOTO],
     }
 
 
@@ -198,8 +210,8 @@ def render_sources(manifest: dict) -> str:
         "|---|---|---|---|---|---|",
     ]
     for x in manifest["external"]:
-        pin = (f"커밋 {code(x['commit'])}, 파일별 sha256: {code(x['lock'])}" if "commit" in x
-               else "결정적 생성(고정 시드)")
+        pin = x.get("pin") or (f"커밋 {code(x['commit'])}, 파일별 sha256: {code(x['lock'])}" if "commit" in x
+                               else "결정적 생성(고정 시드)")
         src = f"[{x['name']}]({x['url']})" if "url" in x else x["name"]
         lines.append("| " + " | ".join([
             code(x["dest"]), src, md_cell(x["license"]), pin, code(x["fetch"]), md_cell(x["notes"]),

@@ -5,6 +5,7 @@
 #   build.sh [all]                      generate -> tamper -> expected -> manifest -> check
 #   build.sh check                      manifest.json / SOURCES.md / 커밋 기준 검사만
 #   build.sh bench [--xxl]              벤치 합성 세트(samples/bench/, 커밋하지 않음)
+#   build.sh bench-photo                벤치 사진 세트 인코딩(PhotoSources가 만든 PNG 필요, bench/run.sh)
 #   build.sh conformance [옵션]         libwebp-test-data 받기(samples/conformance/, 네트워크 필요)
 set -eu
 
@@ -27,11 +28,14 @@ case "$cmd" in
   bench)
     python3 -I samples/scripts/bench_synth.py "$@"
     ;;
+  bench-photo)
+    python3 -I samples/scripts/bench_photo.py "$@"
+    ;;
   conformance)
     python3 -I samples/scripts/fetch_conformance.py "$@"
     ;;
   *)
-    echo "usage: build.sh [all|check|bench [--xxl]|conformance [--verify-only] [--check-pam-md5]]" >&2
+    echo "usage: build.sh [all|check|bench [--xxl]|bench-photo|conformance [--verify-only] [--check-pam-md5]]" >&2
     exit 2
     ;;
 esac
