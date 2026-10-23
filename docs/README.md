@@ -11,7 +11,7 @@ docs/
   research/        조사 결과 (사실 기록, 출처 포함)
   adr/             Architecture Decision Records (MADR 형식)
   design/          설계 문서 (목표·제약, API, 시퀀스)
-  conventions/     작업 방식, 주석/문서화, 테스트 규칙
+  conventions/     작업 방식, 주석/문서화, 테스트, git 규칙
 ```
 
 ## 운영 규칙
@@ -88,3 +88,4 @@ docs/
 - [conventions/working-principles.md](conventions/working-principles.md) — 작업 원칙 4가지(출처·라이선스 포함)
 - [conventions/code-documentation.md](conventions/code-documentation.md) — 주석과 문서화
 - [conventions/testing.md](conventions/testing.md) — 테스트 작성
+- [conventions/git-workflow.md](conventions/git-workflow.md) — 커밋, 브랜치, 병합(`--no-ff`)
