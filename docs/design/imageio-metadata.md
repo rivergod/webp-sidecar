@@ -44,13 +44,22 @@ TwelveMonkeys imageio-webp(`StandardImageMetadataSupport`)와 같은 노드를 �
 | 노드 | 값 |
 |---|---|
 | `Chroma` | `ColorSpaceType name="RGB"`, `NumChannels` 3(alpha 없음) / 4, `BlackIsZero TRUE` |
-| `Compression` | `CompressionTypeName` VP8 / VP8L, `Lossless` FALSE / TRUE |
+| `Compression` | `CompressionTypeName` VP8 / VP8L, `Lossless` FALSE / TRUE — 그 프레임의 비트스트림 기준 |
 | `Data` | `PlanarConfiguration PixelInterleaved`, `SampleFormat UnsignedIntegral`, `BitsPerSample` "8 8 8" / "8 8 8 8" |
 | `Dimension` | `PixelAspectRatio 1.0`, `ImageOrientation Normal` |
 | `Document` | `FormatVersion 1.0` |
 | `Transparency` | `Alpha` none / nonpremultiplied |
 
-TwelveMonkeys와 실제 출력 트리를 나란히 비교하는 검증은 Phase 4 벤치 모듈(TwelveMonkeys를 의존성으로 가진다)에서 한다.
+"alpha 있음"은 `read(i)`가 돌려주는 이미지 기준이다. 정지 이미지는 비트스트림에 알파가 있을 때, 애니메이션 프레임은 **항상**이다(투명으로 초기화한 캔버스에 합성한 ARGB를 돌려주므로 — §4). native `Frame/hasAlpha`는 프레임 비트스트림의 알파를 그대로 적는다.
+
+#### TwelveMonkeys와 값이 다른 경우
+
+Phase 4 벤치 모듈에서 실제 출력 트리를 나란히 비교했다(벤치 세트와 `samples/generated`의 정지·메타데이터·애니메이션 파일). 노드 구성은 모두 같고, 정지 이미지 중 단순 형식(VP8, VP8L, VP8X+VP8 / ALPH)은 값까지 같다. 다른 경우는 다음 둘이다.
+
+| 경우 | 이 플러그인 | TwelveMonkeys 3.15.3 | 판단 |
+|---|---|---|---|
+| VP8X 컨테이너 안의 VP8L(정지 이미지 + ICC/EXIF/XMP, lossless 애니메이션 프레임) | `VP8L` / `Lossless TRUE` | `VP8` / `Lossless FALSE` | 파일은 lossless다. TwelveMonkeys 값을 따르지 않는다 |
+| 애니메이션 프레임의 알파 | 항상 있음(반환 이미지가 ARGB 캔버스) | VP8X 헤더 알파 플래그를 따른다 | 플래그가 없는 애니메이션에서만 다르다. 메타데이터가 반환 이미지와 맞아야 하므로 이 플러그인 규칙을 유지한다 |
 
 ## 4. 애니메이션 읽기
 

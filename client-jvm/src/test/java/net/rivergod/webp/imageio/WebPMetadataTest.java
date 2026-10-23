@@ -11,7 +11,10 @@ import java.util.List;
 import javax.imageio.metadata.IIOInvalidTreeException;
 import javax.imageio.metadata.IIOMetadataFormatImpl;
 import javax.imageio.metadata.IIOMetadataNode;
+import net.rivergod.webp.imageio.proto.v1.Compression;
+import net.rivergod.webp.imageio.proto.v1.FrameInfo;
 import org.junit.jupiter.api.Test;
+import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
 class WebPMetadataTest {
@@ -77,6 +80,22 @@ class WebPMetadataTest {
         assertEquals("VP8L", attribute(root, "Compression", "CompressionTypeName"));
         assertEquals("nonpremultiplied", attribute(root, "Transparency", "Alpha"));
         assertEquals("1.0", attribute(root, "Dimension", "PixelAspectRatio"));
+    }
+
+    @Test
+    void imageMetadata_opaqueAnimationFrame_standardTreeDescribesArgbCanvas() {
+        // given: 알파 없는 프레임이라도 read(i)는 투명 캔버스에 합성한 ARGB를 돌려준다(ADR-0014)
+        WebPImageMetadata m = WebPImageMetadata.forFrame(FrameInfo.newBuilder()
+                .setWidth(16).setHeight(16).setHasAlpha(false).setCompression(Compression.COMPRESSION_LOSSY).build());
+
+        // when
+        Node root = m.getAsTree(IIOMetadataFormatImpl.standardMetadataFormatName);
+
+        // then: 표준 포맷은 반환 이미지(ARGB)를, native 포맷은 프레임 비트스트림을 기술한다
+        assertEquals("nonpremultiplied", attribute(root, "Transparency", "Alpha"));
+        assertEquals("4", attribute(root, "Chroma", "NumChannels"));
+        Node nativeRoot = m.getAsTree(WebPStreamMetadataFormat.NATIVE_FORMAT_NAME);
+        assertEquals("FALSE", ((Element) nativeRoot.getFirstChild()).getAttribute("hasAlpha"));
     }
 
     @Test
