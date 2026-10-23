@@ -149,7 +149,10 @@ pub fn versions() -> Versions {
 
 fn status_error(op: &str, status: c_int) -> WebpError {
     match status {
-        VP8_STATUS_OUT_OF_MEMORY => WebpError::OutOfMemory(format!("{op}: VP8_STATUS_OUT_OF_MEMORY")),
+        // libwebp 1.6.0은 일부 손상 파일(ALPH 예약 비트 등)에도 이 값을 돌려준다(samples/manifest.json, malformed/alph_*).
+        VP8_STATUS_OUT_OF_MEMORY => WebpError::OutOfMemory(format!(
+            "{op}: VP8_STATUS_OUT_OF_MEMORY (libwebp also reports this for some corrupt files)"
+        )),
         VP8_STATUS_INVALID_PARAM => WebpError::Internal(format!("{op}: VP8_STATUS_INVALID_PARAM")),
         VP8_STATUS_BITSTREAM_ERROR => WebpError::InvalidData(format!("{op}: bitstream error")),
         VP8_STATUS_UNSUPPORTED_FEATURE => WebpError::InvalidData(format!("{op}: unsupported feature")),

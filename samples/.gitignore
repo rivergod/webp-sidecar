@@ -1,0 +1,5 @@
+# 커밋하지 않는 세트와 중간 산출물 (ADR-0006)
+/conformance/
+/bench/
+/.build/
+__pycache__/

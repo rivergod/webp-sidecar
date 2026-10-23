@@ -28,3 +28,8 @@ mvnw     text eol=lf
 *.gz    binary
 *.pdf   binary
 *.bin   binary
+*.exif  binary
+
+# 해시가 고정된 샘플: 줄바꿈 변환을 하지 않는다(samples/manifest.json).
+*.xmp  -text
+samples/third_party/** -text

@@ -117,7 +117,7 @@ sequenceDiagram
 | WebP가 아님, 손상, 잘림 | `INVALID_ARGUMENT` | `VP8_STATUS_BITSTREAM_ERROR`, `VP8_STATUS_NOT_ENOUGH_DATA`, `VP8_STATUS_UNSUPPORTED_FEATURE`, `WEBP_MUX_BAD_DATA` | `IIOException("Invalid or corrupted WebP data: <message>", cause)` |
 | 프로토콜 위반 (메시지 순서, 선언 크기 불일치, 조각 크기 초과), 잘못된 옵션 | `INVALID_ARGUMENT` | - | `IIOException` (클라이언트 버그이므로 메시지에 RPC 이름 포함) |
 | 서버 상한 초과 | `RESOURCE_EXHAUSTED` | - | `IIOException("WebP image exceeds server limit: <message>", cause)` |
-| 메모리 할당 실패 | `RESOURCE_EXHAUSTED` | `VP8_STATUS_OUT_OF_MEMORY`, `WEBP_MUX_MEMORY_ERROR` | 위와 같음 |
+| 메모리 할당 실패 | `RESOURCE_EXHAUSTED` | `VP8_STATUS_OUT_OF_MEMORY`, `WEBP_MUX_MEMORY_ERROR` | 위와 같음. libwebp 1.6.0은 일부 손상 파일(ALPH 예약 비트, ALPH 압축 방식 2)에도 `VP8_STATUS_OUT_OF_MEMORY`를 돌려주므로 메시지에 그 가능성을 적는다(samples/manifest.json) |
 | 프레임 번호 범위 밖 | `OUT_OF_RANGE` | - | 클라이언트가 먼저 `IndexOutOfBoundsException`을 던진다(ImageReader 규약). 서버 응답은 방어선이다. |
 | 아직 구현하지 않은 RPC | `UNIMPLEMENTED` | - | `IIOException` |
 | 그 밖의 서버 내부 오류 | `INTERNAL` | `VP8_STATUS_INVALID_PARAM`(서버 버그) | `IIOException` |

@@ -29,6 +29,7 @@ tower = "0.5"
 tempfile = "3"
 sha2 = "0.10"
 md-5 = "0.10"
+serde_json = "1"
 
 [profile.release]
 # 바이너리 크기와 성능의 균형. 패닉은 요청 단위로 처리하지 않으므로 unwind 유지.

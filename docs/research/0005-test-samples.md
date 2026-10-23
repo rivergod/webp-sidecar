@@ -204,6 +204,17 @@ tools/samples/            # 생성·변조·fetch·검증 스크립트 (위치�
   - 합성 콘텐츠는 압축률이 비현실적이므로 사진 콘텐츠를 반드시 함께 쓴다.
   - 디코드 벤치는 TwelveMonkeys, darkxanter, 사이드카 3자를 비교한다. 인코드 벤치는 darkxanter와 사이드카 2자다. TwelveMonkeys에는 WebP writer가 없다 [S24].
 
+## 샘플 생성 중 추가로 확인한 사실 (2026-10-23, libwebp 1.6.0 도구 이미지)
+
+samples/manifest.json의 `expected.observed`에 도구별 판정이 기록돼 있다. 위 "변조 생성 검증"(dwebp만 확인)을 보충한다.
+
+- **VP8X 예약 플래그 비트**: dwebp는 받지만 WebPDemux(따라서 WebPAnimDecoder)는 거부한다. 24비트 예약 필드는 둘 다 받는다. 그래서 같은 파일이 정지 이미지 디코딩은 되고 `GetFeatures`(demux)는 실패할 수 있다.
+- **ALPH 예약 비트, ALPH 압축 방식 2**: libwebp가 `VP8_STATUS_OUT_OF_MEMORY`로 거부한다(RFC 9649 §2.7.1.2는 예약 비트를 무시하라고 한다).
+- **libwebp가 받는 손상 파일**: VP8 뒤의 ALPH, 이미지 뒤의 ICCP, 중복 VP8, 실제보다 100바이트 작은 VP8 청크 크기, 패딩 누락, 비트스트림과 맞지 않는 ANMF 크기, 중첩 ANMF.
+- **중복 EXIF/ICCP**: WebPDemux는 첫 청크를 돌려주고, WebPMux는 파일을 거부한다.
+- **출력량 폭탄**: 4096² 캔버스에 1×1 프레임 1,000개인 파일은 기본 상한(픽셀, 프레임 수)을 모두 통과하지만 합성 프레임 출력이 약 64 GiB다. 메모리는 스트리밍으로 제한되지만 CPU·전송량을 소모한다(Phase 5 검토 항목).
+- **webpmux**: 홀수 오프셋을 짝수로 내림하고, 프레임 1개짜리 애니메이션은 정지 이미지로 바꾼다.
+
 ## 미확인 항목
 
 - libwebp-test-data 데이터 파일의 라이선스(LICENSE 파일이 없다)와 `bryce.webp` 원본 사진의 출처.
