@@ -1,46 +1,128 @@
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
+# 저장소 전체 무시 규칙. 디렉터리 전용 규칙은 그 디렉터리의 .gitignore에 둔다
+# (samples/.gitignore: 받거나 생성하는 샘플 세트, bench/.gitignore: JMH 원시 결과, bench/wasm/.gitignore: Wasm 산출물).
+# 이미 추적 중인 파일이 새 규칙에 걸리지 않는지 확인: git ls-files -ci --exclude-standard
 
-# 에디터 / IDE
+# --- OS ---
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+# Windows
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# --- 에디터 / IDE ---
+# JetBrains (IntelliJ IDEA, RustRover, CLion, Fleet)
 .idea/
 *.iml
-.vscode/
+*.ipr
+*.iws
+.fleet/
+# VS Code: 개인 설정은 무시하고, 팀이 공유하기로 한 파일만 예외로 커밋한다
+.vscode/*
+!.vscode/extensions.json
+.history/
+*.code-workspace
+# Eclipse / VS Code Java(Eclipse JDT 기반)
 .classpath
 .project
 .settings/
+.factorypath
+.apt_generated/
+# Java 확장이 Gradle 대신 쓰는 출력 디렉터리. Rust의 src/bin과 겹치지 않게 모듈 바로 아래만 막는다.
+/client-jvm/bin/
+/bench/bin/
+# NetBeans, Sublime
+nbproject/private/
+*.sublime-workspace
+# Vim, Emacs
 *.swp
+*.swo
+Session.vim
+.netrwhist
 *~
+\#*\#
+.\#*
 
-# 빌드 산출물 (Java/Gradle/Maven, Rust)
+# --- Java / Gradle / Kotlin ---
+.gradle/
 build/
 out/
-target/
-.gradle/
 .kotlin/
 *.class
-**/*.rs.bk
-
-# Go 산출물
-*.exe
-*.test
-coverage.out
-
-# JVM 크래시 로그
+# Gradle wrapper jar만 커밋한다(그 밖의 jar는 빌드 산출물이나 받은 의존성이다)
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+gradle-app.setting
+.gradletasknamecache
+# JVM 크래시 로그, 힙 덤프, JFR 기록
 hs_err_pid*.log
 replay_pid*.log
+*.hprof
+*.jfr
 
-# 로그 / 임시
+# --- Rust ---
+# Cargo.lock은 커밋한다(실행 파일 크레이트)
+target/
+**/*.rs.bk
+*.pdb
+# 커버리지 계측 산출물(cargo llvm-cov, grcov)
+*.profraw
+*.profdata
+lcov.info
+
+# --- Go (spikes/) ---
+*.exe
+*.test
+*.prof
+coverage.out
+
+# --- Python (samples/scripts) ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- 프로파일링 / 벤치마크 부산물 ---
+perf.data
+perf.data.old
+
+# --- 로그 / 임시 / 병합 잔여물 ---
 *.log
 tmp/
+*.tmp
+*.bak
+*.orig
+*.rej
 
-# 로컬 환경 (예시 파일만 커밋)
+# --- 로컬 환경과 비밀값 (예시 파일만 커밋한다, AGENTS.md 금지 사항) ---
 .env
 .env.*
 !.env.example
+# 키·인증서. 테스트에 필요한 고정 인증서가 생기면 그 경로만 예외로 추가한다.
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
 
-# AI 에이전트 개인 설정 (공유 설정은 커밋한다)
+# --- AI 에이전트 개인 설정 (공유 설정은 커밋한다: CLAUDE.md, .gemini/settings.json, .cursor/rules/) ---
 .claude/settings.local.json
 CLAUDE.local.md
+GEMINI.local.md
 AGENTS.override.md
+.aider*
