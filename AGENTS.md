@@ -89,7 +89,10 @@ docs/         조사(research), 결정(adr), 설계(design), 규칙(conventions)
 ## 기타 규칙
 
 - 파일은 UTF-8, LF 줄바꿈이다(`.gitattributes`, `.editorconfig`). Windows 전용 스크립트(`.bat`, `.cmd`, `.ps1`)만 CRLF.
-- 커밋은 논리 단위로 나누고 메시지는 `<type>: <요약>` 형식으로 쓴다(type: `feat`, `fix`, `docs`, `test`, `build`, `chore`, `refactor`). 요약은 한국어로 써도 된다.
+- git 작업 방식 상세: [docs/conventions/git-workflow.md](docs/conventions/git-workflow.md)
+  - 작업은 `main`에서 만든 브랜치(`<type>/<짧은-설명>`)에서 하고, `main`에 직접 커밋하지 않는다.
+  - 커밋은 논리 단위로 나누고 작업이 길면 주요 항목마다 커밋한다. 메시지는 `<type>: <요약>` 형식이다(type: `feat`, `fix`, `docs`, `test`, `build`, `chore`, `refactor`). 요약은 한국어로 써도 된다.
+  - `main`에는 `git merge --no-ff <브랜치>`로 병합한다(fast-forward 금지). 병합한 브랜치는 지운다.
 ## 이 파일과 연결 파일을 고칠 때
 
 도구별 동작 근거: [docs/research/0002-agent-glue.md](docs/research/0002-agent-glue.md)
