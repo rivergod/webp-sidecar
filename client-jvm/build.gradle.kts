@@ -127,9 +127,15 @@ val buildServerImage = tasks.register<Exec>("buildServerImage") {
     commandLine("docker", "build", "-q", "-f", "deploy/Dockerfile", "-t", serverImage.get(), ".")
 }
 
+// 서버 컨테이너에 적용할 seccomp 프로파일(deploy/README.md). -PwebpSeccompProfile=<경로>로 바꾼다(프로파일 갱신용 LOG 모드 등).
+val seccompProfile = providers.gradleProperty("webpSeccompProfile")
+    .orElse(rootProject.layout.projectDirectory.file("deploy/seccomp/webp-imageio-server.json").asFile.path)
+
 fun Test.useServerImage() {
     dependsOn(buildServerImage)
     systemProperty("webp.test.serverImage", serverImage.get())
+    systemProperty("webp.test.seccompProfile", seccompProfile.get())
+    inputs.file(seccompProfile)
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
 }
