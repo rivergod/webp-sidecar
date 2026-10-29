@@ -66,6 +66,16 @@ BENCH_PHOTO = {
     "notes": "6084x6084 JPEG을 받아 sha256을 확인하고, 자르고 줄여(PhotoSources) bench_synth.py와 같은 cwebp 옵션으로 "
              "인코딩한다(bench_photo.py). 애니메이션 1개(12프레임 팬)를 포함한다.",
 }
+BENCH_GIF = {
+    "name": "synthetic video-like GIF set (from the NASA photo set)",
+    "dest": "bench/gif/",
+    "pin": "결정적 생성(사진 세트에서). 파일별 sha256: `bench/gif/index.json`",
+    "license": "public domain (NASA 사진에서 생성)",
+    "committed": False,
+    "fetch": "bench/gif.sh inputs",
+    "notes": "GIF → WebP 변환 측정용(research/0012). 사진 위를 훑는 영상 같은 GIF: 캔버스 전체 프레임, disposal 1, "
+             "프레임별 팔레트, 70 ms. 572x315x111, 480x270x(93, 10, 100, 300, 1000).",
+}
 
 
 def header() -> dict:
@@ -100,7 +110,7 @@ def header() -> dict:
         },
         "policy": {"max_file_bytes": sl.MAX_FILE_BYTES, "max_total_bytes": sl.MAX_TOTAL_BYTES,
                    "allowed_licenses": sorted(ALLOWED_LICENSES)},
-        "external": [CONFORMANCE, BENCH, BENCH_PHOTO],
+        "external": [CONFORMANCE, BENCH, BENCH_PHOTO, BENCH_GIF],
     }
 
 

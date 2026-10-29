@@ -2,3 +2,4 @@
 results/**/*.json
 results/**/*.txt
 !results/**/environment*.txt
+!results/**/load*.txt

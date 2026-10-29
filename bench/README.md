@@ -27,6 +27,12 @@ bench/run.sh jmh decode # 묶음 하나만
 
 단계별 명령과 환경변수(CPU 고정, 포트)는 [run.sh](run.sh) 머리 주석에 있다.
 
+GIF → WebP 변환(단건, 동시 부하, `gif2webp` 비교)은 [gif.sh](gif.sh)로 잰다(결과: [research/0012](../docs/research/0012-gif-conversion-load.md)):
+
+```sh
+bench/gif.sh inputs && bench/gif.sh single && bench/gif.sh load
+```
+
 ## 구성
 
 | 경로 | 내용 |
