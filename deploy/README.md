@@ -7,6 +7,7 @@
 | [Dockerfile](Dockerfile) | musl 정적 바이너리 + `scratch` 이미지(ADR-0012). 빌드 컨텍스트는 저장소 루트 |
 | [compose.yaml](compose.yaml) | 사이드카 예시(공유 볼륨의 UDS). compose로는 미검증 |
 | [seccomp/webp-imageio-server.json](seccomp/webp-imageio-server.json) | seccomp 허용 목록 프로파일(x86_64). 아래 "seccomp 프로파일" |
+| [scripts/verify-hardening.sh](scripts/verify-hardening.sh) | 격리 옵션이 실제로 적용됐는지 확인. 아래 "격리 적용 확인" |
 
 ## 빌드
 
@@ -53,6 +54,23 @@ docker run -d --name webp-server \
 3. 로그에 나온 호출을 이유와 함께 넣고, 기본 동작을 `SCMP_ACT_ERRNO`로 되돌려 통합 테스트를 다시 돌린다.
 
 **LOG 모드만 믿지 않는다.** runc의 `getdents64`(exec fd 정리)는 LOG 모드 감사 로그에 나오지 않았는데 ERRNO 모드에서는 막혀 컨테이너가 뜨지 않았다(원인 미확인). ERRNO로 막힌 호출은 감사 로그에도 남지 않으므로, 마지막 확인은 반드시 최종 프로파일(ERRNO)로 컨테이너 기동과 통합 테스트 전체를 돌려서 한다. runc를 올린 뒤에도 같다.
+
+## 격리 적용 확인
+
+```sh
+deploy/scripts/verify-hardening.sh            # 저장소 루트에서. 이미지 기본값 webp-imageio-server:dev
+```
+
+위 "실행 (격리 옵션)"과 같은 옵션으로 컨테이너를 띄우고 23개 항목을 확인한다. 설정값만 보지 않고, 호스트에서 본 서버 프로세스의 실제 상태를 함께 본다.
+
+| 구분 | 확인 항목 |
+|---|---|
+| 설정값(`docker inspect`) | read-only rootfs, 네트워크 `none`, `cap-drop ALL`, 메모리·스왑 1 GiB, CPU 2, pids 128, 이미지 사용자 65532 |
+| 프로세스(`/proc/<pid>/status`) | uid·gid 65532(real, effective, saved, fs), capability(effective, permitted, bounding) 모두 0, `NoNewPrivs` 1, `Seccomp` 2(필터) |
+| 마운트·네트워크 | `/`는 `ro`, `/run/webp-imageio`만 `rw`. 네트워크 인터페이스는 `lo`뿐 |
+| cgroup v2 | `memory.max` 1 GiB, `memory.swap.max` 0, `cpu.max` `200000 100000`, `pids.max` 128 |
+
+2026-10-29 실행 결과: 23개 모두 통과(Docker 29.1.3, runc 1.4.0, cgroup v2). 메모리 상한이 실제로 프로세스를 멈추는 것은 메모리 예산 측정에서 확인했다(OOMKilled, [research/0007](../docs/research/0007-server-memory-budget.md)).
 
 ## 스모크 테스트
 
