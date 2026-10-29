@@ -35,4 +35,6 @@ ImageIO.write(image, "webp", new File("out.webp"));   // 기본: lossy, libwebp 
 ```
 
 - 무손실 쓰기: `ImageWriteParam`에서 `setCompressionMode(MODE_EXPLICIT)`, `setCompressionType("Lossless")`.
+- 애니메이션 쓰기: `prepareWriteSequence` → `writeToSequence` × N → `endWriteSequence`. 프레임 표시 시간은 native 이미지 메타데이터 `Frame@durationMs`로 준다([design/imageio-metadata.md](../docs/design/imageio-metadata.md)). 모든 프레임은 캔버스 전체 크기의 **완성된 화면**이어야 한다.
+- GIF → WebP 변환: JDK GIF 리더의 `read(i)`는 프레임 원본(프레임 사각형 크기, 바뀌지 않은 픽셀은 투명)을 돌려준다. 그대로 넘기면 결과가 깨진다. disposal을 적용해 캔버스에 합성한 뒤 넘긴다. 참고 구현: [bench/.../GifFrames.java](../bench/src/main/java/net/rivergod/webp/imageio/bench/GifFrames.java). 영상 같은 GIF는 lossy가 GIF의 0.14–0.35배 크기다. lossless는 GIF보다 커질 수 있다([research/0012](../docs/research/0012-gif-conversion-load.md)).
 - 서버가 없거나 응답하지 않으면 `IIOException("WebP server unavailable …")`, 손상 입력은 `IIOException("Invalid or corrupted WebP data …")`, 상한 초과는 `IIOException("WebP image exceeds … limit …")`. 원래 gRPC 예외는 cause에 있다.

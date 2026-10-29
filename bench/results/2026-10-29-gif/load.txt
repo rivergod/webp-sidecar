@@ -1,0 +1,22 @@
+input: dn0t5cpw.gif (클라이언트 데드라인 기본 30000 ms, 단계당 60초)
+mode=lossy concurrency=1 elapsed_s=60.4 ok=38 errors={} throughput_per_s=0.629 p50_ms=1587 p90_ms=1621 p99_ms=1689 max_ms=1689 server_peak_mib=14 oom_killed=false
+mode=lossy concurrency=2 elapsed_s=60.5 ok=74 errors={} throughput_per_s=1.224 p50_ms=1633 p90_ms=1659 p99_ms=1730 max_ms=1730 server_peak_mib=26 oom_killed=false
+mode=lossy concurrency=4 elapsed_s=63.2 ok=77 errors={} throughput_per_s=1.219 p50_ms=3236 p90_ms=3294 p99_ms=3396 max_ms=3396 server_peak_mib=27 oom_killed=false
+mode=lossy concurrency=8 elapsed_s=65.5 ok=80 errors={} throughput_per_s=1.221 p50_ms=6528 p90_ms=6669 p99_ms=6738 max_ms=6738 server_peak_mib=28 oom_killed=false
+mode=lossy concurrency=16 elapsed_s=71.8 ok=88 errors={} throughput_per_s=1.225 p50_ms=12996 p90_ms=13232 p99_ms=13319 max_ms=13319 server_peak_mib=32 oom_killed=false
+mode=lossless concurrency=1 elapsed_s=60.4 ok=18 errors={} throughput_per_s=0.298 p50_ms=3339 p90_ms=3473 p99_ms=3603 max_ms=3603 server_peak_mib=27 oom_killed=false
+mode=lossless concurrency=2 elapsed_s=60.0 ok=36 errors={} throughput_per_s=0.600 p50_ms=3327 p90_ms=3404 p99_ms=3425 max_ms=3425 server_peak_mib=44 oom_killed=false
+mode=lossless concurrency=4 elapsed_s=64.3 ok=38 errors={} throughput_per_s=0.591 p50_ms=6666 p90_ms=7026 p99_ms=7179 max_ms=7179 server_peak_mib=46 oom_killed=false
+mode=lossless concurrency=8 elapsed_s=70.2 ok=42 errors={} throughput_per_s=0.599 p50_ms=13312 p90_ms=13434 p99_ms=13577 max_ms=13577 server_peak_mib=46 oom_killed=false
+mode=lossless concurrency=16 elapsed_s=83.6 ok=50 errors={} throughput_per_s=0.598 p50_ms=26400 p90_ms=27142 p99_ms=27293 max_ms=27293 server_peak_mib=53 oom_killed=false
+input: video_572x315_111.gif (클라이언트 데드라인 기본 30000 ms, 단계당 60초)
+mode=lossy concurrency=1 elapsed_s=61.0 ok=45 errors={} throughput_per_s=0.737 p50_ms=1353 p90_ms=1386 p99_ms=1408 max_ms=1408 server_peak_mib=13 oom_killed=false
+mode=lossy concurrency=2 elapsed_s=60.5 ok=86 errors={} throughput_per_s=1.421 p50_ms=1401 p90_ms=1447 p99_ms=1484 max_ms=1484 server_peak_mib=23 oom_killed=false
+mode=lossy concurrency=4 elapsed_s=62.7 ok=89 errors={} throughput_per_s=1.420 p50_ms=2784 p90_ms=2812 p99_ms=2894 max_ms=2894 server_peak_mib=23 oom_killed=false
+mode=lossy concurrency=8 elapsed_s=65.5 ok=94 errors={} throughput_per_s=1.436 p50_ms=5546 p90_ms=5612 p99_ms=5665 max_ms=5665 server_peak_mib=25 oom_killed=false
+mode=lossy concurrency=16 elapsed_s=70.5 ok=100 errors={} throughput_per_s=1.418 p50_ms=11211 p90_ms=11437 p99_ms=11468 max_ms=11485 server_peak_mib=28 oom_killed=false
+mode=lossless concurrency=1 elapsed_s=63.2 ok=15 errors={} throughput_per_s=0.237 p50_ms=4212 p90_ms=4246 p99_ms=4254 max_ms=4254 server_peak_mib=29 oom_killed=false
+mode=lossless concurrency=2 elapsed_s=61.1 ok=28 errors={} throughput_per_s=0.458 p50_ms=4356 p90_ms=4409 p99_ms=4492 max_ms=4492 server_peak_mib=57 oom_killed=false
+mode=lossless concurrency=4 elapsed_s=65.5 ok=30 errors={} throughput_per_s=0.458 p50_ms=8719 p90_ms=8784 p99_ms=8840 max_ms=8840 server_peak_mib=57 oom_killed=false
+mode=lossless concurrency=8 elapsed_s=74.0 ok=34 errors={} throughput_per_s=0.459 p50_ms=17372 p90_ms=17424 p99_ms=17503 max_ms=17503 server_peak_mib=59 oom_killed=false
+mode=lossless concurrency=16 elapsed_s=86.2 ok=24 errors={DEADLINE_EXCEEDED=20} throughput_per_s=0.278 p50_ms=26326 p90_ms=29974 p99_ms=29985 max_ms=29985 server_peak_mib=75 oom_killed=false

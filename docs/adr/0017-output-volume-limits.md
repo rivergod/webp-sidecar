@@ -1,9 +1,10 @@
-# 0017. 요청당 작업량 상한: 합성 픽셀 수 상한과 서버 쪽 요청 시간 상한
+# 0017. 요청당 작업량 상한: 합성 픽셀 수 상한, 서버 쪽 요청 시간 상한, 대기 상한
 
 - 상태: proposed
 - 날짜: 2026-10-29
 - 결정자: -
-- 관련 문서: [ADR-0012](0012-server-runtime-config.md)(서버 설정과 상한), [ADR-0014](0014-animation-and-metadata-mapping.md)(애니메이션 매핑), [ADR-0016](0016-memory-budget-admission.md)(메모리 예산, proposed), [docs/research/0005-test-samples.md](../research/0005-test-samples.md) "출력량 폭탄", [docs/roadmap.md](../roadmap.md) Phase 5-1
+- 관련 문서: [ADR-0012](0012-server-runtime-config.md)(서버 설정과 상한), [ADR-0014](0014-animation-and-metadata-mapping.md)(애니메이션 매핑), [ADR-0016](0016-memory-budget-admission.md)(메모리 예산, proposed), [docs/research/0005-test-samples.md](../research/0005-test-samples.md) "출력량 폭탄", [docs/research/0012-gif-conversion-load.md](../research/0012-gif-conversion-load.md)(GIF 변환 부하), [docs/roadmap.md](../roadmap.md) Phase 5-1
+- 개정: 2026-10-29 — GIF → WebP 동시 부하 측정(research/0012)을 반영해 EncodeAnimation의 합성 픽셀 상한과 대기 상한을 더했다
 
 ## 맥락
 
@@ -18,6 +19,12 @@
   - 지금은 클라이언트 데드라인(기본 30초)과 클라이언트의 취소에만 기댄다.
   - 응답을 읽지 않는 클라이언트는 서버의 흐름 제어 때문에 블로킹 스레드와 슬롯을 계속 쥘 수 있다.
   - 클라이언트 쪽 설정이 바뀌거나, 이 플러그인이 아닌 클라이언트가 붙으면 이 보호가 사라진다.
+
+- **대기에 상한이 없다**(research/0012, GIF → WebP 동시 부하).
+  - 서버는 동시 처리 슬롯(기본 2)을 기다리는 요청 수에 제한이 없다. 그래서 동시 요청이 늘면 지연이 비례해 는다(대기 ≈ 대기 요청 수 / 2 × 1건 시간).
+  - 이 지연이 클라이언트 데드라인(30초)을 넘으면, 늦게 슬롯을 잡은 요청이 일을 하다 취소된다.
+  - 합성 GIF lossless 동시 16건에서 처리량이 0.46 → 0.28건/초로 떨어졌고, 44건 중 20건이 실패했다(과부하 붕괴).
+- **인코딩 쪽에도 같은 곱이 있다.** EncodeAnimation의 작업량도 캔버스 × 프레임이다. lossless는 100만 px당 약 0.2–0.3초가 든다.
 
 ## 결정 동인
 
@@ -45,6 +52,7 @@
 | 정의 | 요청 하나가 합성하는 캔버스 픽셀 수의 합 |
 | DecodeAnimation | 캔버스 픽셀 수 × 프레임 수 |
 | `Decode(frame_index = i)` | 캔버스 픽셀 수 × (i + 1) |
+| EncodeAnimation | 캔버스 픽셀 수 × 받은 프레임 수. 프레임 수를 미리 알 수 없으므로 프레임을 받을 때마다 누적하고, 넘으면 그 자리에서 `RESOURCE_EXHAUSTED`로 끝낸다(헤더 단계 거부는 아니다) |
 | 정지 이미지 | 캔버스 픽셀 수(기존 `max_pixels`가 이미 더 엄격하다) |
 | 검사 시점 | 헤더와 프레임 목록(`container_info`)만 읽은 뒤, 디코더를 만들기 전 |
 | 넘을 때 | 픽셀을 디코딩하지 않고 `RESOURCE_EXHAUSTED`. 메시지에 계산값과 상한을 넣는다 |
@@ -73,14 +81,29 @@
 | 설정 | `--max-request-ms` / `WEBP_SERVER_MAX_REQUEST_MS` |
 | 한계 | libwebp 함수 한 번(정지 이미지 디코딩·인코딩 한 번) 안에서는 멈출 수 없다. 그 시간은 `max_pixels`와 ADR-0016이 묶는다 |
 
-두 상한은 ADR-0016(메모리 예산)과 독립이다. ADR-0016은 동시에 쓰는 메모리를, 이 ADR은 요청 하나의 작업량과 점유 시간을 묶는다.
+### 대기 상한 `max_queued_requests`
+
+| 항목 | 내용 |
+|---|---|
+| 정의 | 동시 처리 슬롯을 기다리는 요청 수의 상한(서버 전체) |
+| 넘을 때 | 슬롯을 기다리지 않고 바로 `UNAVAILABLE`(메시지 "server busy: N requests queued")로 끝낸다. gRPC 규약상 "잠시 뒤 다시 시도"를 뜻하는 상태다. 클라이언트 오류 메시지는 서버 접속 불가와 구분한다 |
+| 기본값 | 8(기본 동시 처리 2의 4배) |
+| 설정 | `--max-queued-requests` / `WEBP_SERVER_MAX_QUEUED_REQUESTS`. 0이면 상한 없음(지금 동작) |
+
+- 기본값 근거: 측정한 lossless 1건이 약 4.3초다. 대기 8건이면 대기 약 17초에 처리 4초로, 클라이언트 기본 데드라인 30초 안에 끝난다. lossy(약 1.4초)는 여유가 더 크다.
+- 효과: 넘치는 요청은 일을 시작하기 전에 거부된다. 그래서 서버 CPU를 취소될 작업에 쓰지 않고, 처리량이 슬롯 한계에서 유지된다.
+- 거부된 요청은 클라이언트(앱)가 물러섰다가 다시 시도한다. 플러그인이 자동으로 재시도할지는 ADR-0020(설정 주입)과 함께 정한다.
+
+세 상한은 ADR-0016(메모리 예산)과 독립이다. ADR-0016은 동시에 쓰는 메모리를, 이 ADR은 요청 하나의 작업량과 점유 시간을 묶는다.
 
 ### 결과
 
 - 긍정: 출력량 폭탄을 일하기 전에 거부한다. 느린 클라이언트나 악의적 클라이언트가 슬롯을 오래 쥐지 못한다.
 - 긍정: 서버 테스트가 출력량 폭탄 샘플을 건너뛰지 않고 거부를 확인할 수 있다.
+- 긍정: 과부하에서 처리량이 무너지지 않는다. 넘치는 요청은 일하기 전에 빨리 거부된다.
+- 부정: 혼잡할 때 앱이 `UNAVAILABLE`(server busy)을 받는다. 재시도와 물러섬이 앱 몫이 된다.
 - 부정: 아주 길거나 해상도가 높은 정상 애니메이션도 기본값에서는 거부된다(예: 4096² × 65프레임). 설정으로 올릴 수 있다.
-- 부정: proto `Limits`에 필드가 하나 늘어난다. Phase 5 proto 회고에서 함께 다룬다.
+- 부정: proto `Limits`에 필드가 하나 늘어난다(`max_composited_pixels`). 하위 호환 추가다(ADR-0019 proto 안건).
 - 클라이언트 영향:
   - `getNumImages`는 GetFeatures로 답하므로 그대로 동작한다.
   - 상한을 넘는 파일의 `read(i)`는 `IIOException`(원인 `RESOURCE_EXHAUSTED`)이 된다.
@@ -91,6 +114,9 @@
 - `samples/malformed/anim_frames_1000_canvas_4096.webp`에 대해 DecodeAnimation과 `Decode(frame_index = 999)`가 픽셀을 보내지 않고 `RESOURCE_EXHAUSTED`를 낸다. 응답이 100 ms 안에 오는지도 확인한다. 서버 `samples.rs`의 출력량 폭탄 건너뛰기를 없앤다.
 - 기존 애니메이션 샘플과 벤치 애니메이션(1024×768 × 12)은 그대로 통과한다.
 - 응답을 읽지 않는 클라이언트 테스트: `max_request_ms`를 짧게 준 서버에서 슬롯이 그 시간 안에 풀리고, 다른 요청이 처리된다.
+- EncodeAnimation: 캔버스 × 받은 프레임 수가 상한을 넘는 순간 `RESOURCE_EXHAUSTED`로 끝나고 슬롯이 풀린다.
+- 대기 상한: 동시 처리 1, 대기 상한 2인 서버에 요청 4개를 보내면 1개는 처리, 2개는 대기 뒤 처리, 1개는 즉시 `UNAVAILABLE`이다.
+- GIF 변환 부하 재측정(`bench/gif.sh load`): 동시 16건 lossless에서 처리량이 슬롯 한계(약 0.46건/초)를 유지하고, 데드라인 초과 대신 즉시 거부로 바뀌는지 본다.
 - 설정 해석 단위 테스트(ADR-0012 방식): 명령줄 → 환경변수 → 기본값, 0과 범위 밖 값 거부.
 
 ## 선택지별 장단점

@@ -38,6 +38,15 @@
       "notes": "6084x6084 JPEG을 받아 sha256을 확인하고, 자르고 줄여(PhotoSources) bench_synth.py와 같은 cwebp 옵션으로 인코딩한다(bench_photo.py). 애니메이션 1개(12프레임 팬)를 포함한다.",
       "pin": "원본 JPEG sha256: `bench.lock.json`",
       "url": "https://commons.wikimedia.org/wiki/File:Space_Shuttle_Columbia_launching.jpg"
+    },
+    {
+      "committed": false,
+      "dest": "bench/gif/",
+      "fetch": "bench/gif.sh inputs",
+      "license": "public domain (NASA 사진에서 생성)",
+      "name": "synthetic video-like GIF set (from the NASA photo set)",
+      "notes": "GIF → WebP 변환 측정용(research/0012). 사진 위를 훑는 영상 같은 GIF: 캔버스 전체 프레임, disposal 1, 프레임별 팔레트, 70 ms. 572x315x111, 480x270x(93, 10, 100, 300, 1000).",
+      "pin": "결정적 생성(사진 세트에서). 파일별 sha256: `bench/gif/index.json`"
     }
   ],
   "files": [
