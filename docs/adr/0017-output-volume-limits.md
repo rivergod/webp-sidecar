@@ -1,8 +1,8 @@
 # 0017. 요청당 작업량 상한: 합성 픽셀 수 상한, 서버 쪽 요청 시간 상한, 대기 상한
 
-- 상태: proposed
+- 상태: accepted
 - 날짜: 2026-10-29
-- 결정자: -
+- 결정자: Ilkang Na
 - 관련 문서: [ADR-0012](0012-server-runtime-config.md)(서버 설정과 상한), [ADR-0014](0014-animation-and-metadata-mapping.md)(애니메이션 매핑), [ADR-0016](0016-memory-budget-admission.md)(메모리 예산, proposed), [docs/research/0005-test-samples.md](../research/0005-test-samples.md) "출력량 폭탄", [docs/research/0012-gif-conversion-load.md](../research/0012-gif-conversion-load.md)(GIF 변환 부하), [docs/roadmap.md](../roadmap.md) Phase 5-1
 - 개정: 2026-10-29 — GIF → WebP 동시 부하 측정(research/0012)을 반영해 EncodeAnimation의 합성 픽셀 상한과 대기 상한을 더했다
 
