@@ -77,6 +77,37 @@ class ArgbFrameSinkTest {
     }
 
     @Test
+    void allocatingOnHeader_alphaFollowsHeader_fillsAllocatedArray() throws IIOException {
+        // given
+        int[][] allocated = new int[1][];
+        ArgbFrameSink sink = ArgbFrameSink.allocatingOnHeader(0, h -> allocated[0] = new int[h.getWidth() * h.getHeight()]);
+        sink.header(header(2, 1, 8).toBuilder().setHasAlpha(false).build());
+
+        // when
+        sink.pixels(ByteString.copyFrom(TWO_PIXELS));
+
+        // then
+        sink.finish();
+        assertArrayEquals(new int[] {0x00112233, 0x00556677}, allocated[0]);
+    }
+
+    @Test
+    void allocatingOnHeader_overClientMaxPixels_neverCallsAllocator() {
+        // given
+        boolean[] called = new boolean[1];
+        ArgbFrameSink sink = ArgbFrameSink.allocatingOnHeader(10, h -> {
+            called[0] = true;
+            return new int[0];
+        });
+
+        // when
+        assertThrows(IIOException.class, () -> sink.header(header(1000, 1000, 4_000_000)));
+
+        // then
+        assertTrue(!called[0]);
+    }
+
+    @Test
     void header_overClientMaxPixels_rejectsBeforeAllocating() {
         // given
         ArgbFrameSink sink = new ArgbFrameSink(1000, 1000, 10, true, null);
