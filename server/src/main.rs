@@ -46,7 +46,10 @@ async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(
         libwebp = %v.decoder, uds = %config.uds_path.display(), tcp = ?config.tcp_addr,
         limits = ?config.limits, max_concurrency = config.max_concurrency, buffer_pool = ?config.buffer_pool,
-        request_policy = ?config.request_policy, "starting"
+        request_policy = ?config.request_policy,
+        // ADR-0016: 요청들이 나눠 쓰는 몫(max_memory_bytes - 풀 총량 상한).
+        memory_budget_bytes = config.request_policy.max_memory_bytes - config.buffer_pool.max_bytes,
+        "starting"
     );
 
     // 두 리스너가 같은 서비스(상한, 동시 처리 슬롯)를 공유한다.
