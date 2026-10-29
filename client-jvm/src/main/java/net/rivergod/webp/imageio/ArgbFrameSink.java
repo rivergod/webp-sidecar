@@ -1,6 +1,7 @@
 package net.rivergod.webp.imageio;
 
 import com.google.protobuf.ByteString;
+import java.nio.ByteOrder;
 import javax.imageio.IIOException;
 import net.rivergod.webp.imageio.proto.v1.FrameHeader;
 import net.rivergod.webp.imageio.proto.v1.PixelFormat;
@@ -17,11 +18,22 @@ final class ArgbFrameSink implements WebPClient.FrameReceiver {
     /** int[] 하나에 담을 수 있는 최대 픽셀 수(JVM 배열 길이 한도 근처). */
     static final long MAX_ARRAY_PIXELS = Integer.MAX_VALUE - 8L;
 
+    /** 헤더의 크기 검증을 마친 뒤 대상 배열을 만든다. 크기를 미리 모를 때 쓴다. */
+    interface Allocator {
+        /**
+         * @param header 검증을 통과한 헤더
+         * @return width × height 길이의 배열
+         * @throws IIOException 만들 수 없을 때
+         */
+        int[] allocate(FrameHeader header) throws IIOException;
+    }
+
     private final int expectedWidth;
     private final int expectedHeight;
     private final long maxPixels;
-    private final boolean alpha;
+    private boolean alpha;
     private final int[] target;
+    private final Allocator allocator;
     private final byte[] carry = new byte[4];
     private int carryLen;
     private byte[] scratch = new byte[0];
@@ -43,6 +55,27 @@ final class ArgbFrameSink implements WebPClient.FrameReceiver {
         this.maxPixels = maxPixels;
         this.alpha = alpha;
         this.target = target;
+        this.allocator = null;
+    }
+
+    private ArgbFrameSink(long maxPixels, Allocator allocator) {
+        this.expectedWidth = -1;
+        this.expectedHeight = -1;
+        this.maxPixels = maxPixels;
+        this.target = null;
+        this.allocator = allocator;
+    }
+
+    /**
+     * 크기를 미리 모를 때(GetFeatures 없이 Decode만 부를 때): 헤더의 크기를 상한으로 검증한 뒤 allocator로 배열을 만들고,
+     * alpha 여부는 헤더의 {@code has_alpha}를 따른다.
+     *
+     * @param maxPixels 클라이언트 픽셀 상한. 0이면 JVM 배열 한도만 적용
+     * @param allocator 검증 뒤 대상 배열을 만든다
+     * @return 새 수신기
+     */
+    static ArgbFrameSink allocatingOnHeader(long maxPixels, Allocator allocator) {
+        return new ArgbFrameSink(maxPixels, allocator);
     }
 
     @Override
@@ -54,7 +87,7 @@ final class ArgbFrameSink implements WebPClient.FrameReceiver {
         if (h.getPixelFormat() != PixelFormat.PIXEL_FORMAT_RGBA8) {
             throw new IIOException("WebP server returned unsupported pixel format " + h.getPixelFormat());
         }
-        if (h.getWidth() != expectedWidth || h.getHeight() != expectedHeight) {
+        if (expectedWidth >= 0 && (h.getWidth() != expectedWidth || h.getHeight() != expectedHeight)) {
             throw new IIOException("WebP server returned " + h.getWidth() + "x" + h.getHeight()
                     + " but GetFeatures reported " + expectedWidth + "x" + expectedHeight);
         }
@@ -73,7 +106,15 @@ final class ArgbFrameSink implements WebPClient.FrameReceiver {
         if (target != null && target.length != pixels) {
             throw new IIOException("destination buffer has " + target.length + " pixels, expected " + pixels);
         }
-        argb = target != null ? target : new int[(int) pixels];
+        if (allocator != null) {
+            alpha = h.getHasAlpha();
+            argb = allocator.allocate(h);
+            if (argb.length != pixels) {
+                throw new IIOException("destination buffer has " + argb.length + " pixels, expected " + pixels);
+            }
+        } else {
+            argb = target != null ? target : new int[(int) pixels];
+        }
         remainingBytes = h.getPixelBytes();
         header = h;
     }
@@ -88,6 +129,24 @@ final class ArgbFrameSink implements WebPClient.FrameReceiver {
             throw new IIOException("WebP server sent more pixel bytes than declared");
         }
         remainingBytes -= n;
+        if (carryLen == 0 && (n & 3) == 0) {
+            // 서버 조각은 픽셀 경계에 맞는 크기(기본 1 MiB)라 보통 이 경로다. 조각을 복사하지 않고 빅엔디언 int로
+            // 대상 배열에 한 번에 읽은 뒤(0xRRGGBBAA), 회전 한 번으로 ARGB를 만든다. 반복문은 JIT가 벡터화한다.
+            int count = n >>> 2;
+            chunk.asReadOnlyByteBuffer().order(ByteOrder.BIG_ENDIAN).asIntBuffer().get(argb, position, count);
+            int end = position + count;
+            if (alpha) {
+                for (int k = position; k < end; k++) {
+                    argb[k] = Integer.rotateRight(argb[k], 8);
+                }
+            } else {
+                for (int k = position; k < end; k++) {
+                    argb[k] >>>= 8;
+                }
+            }
+            position = end;
+            return;
+        }
         if (scratch.length < n) {
             scratch = new byte[n];
         }

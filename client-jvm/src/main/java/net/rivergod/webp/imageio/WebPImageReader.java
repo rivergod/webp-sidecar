@@ -186,6 +186,12 @@ final class WebPImageReader extends ImageReader {
 
     @Override
     public BufferedImage read(int imageIndex, ImageReadParam param) throws IOException {
+        // 정지 이미지를 기본 파라미터로 처음 읽을 때는 GetFeatures 없이 Decode 하나만 부른다(입력도 한 번만 보낸다).
+        // 크기와 alpha는 Decode 응답 헤더로 알고, 대상 이미지는 헤더 검증 뒤에 만든다. 애니메이션은 순차 스트림을
+        // 써야 하므로(ADR-0014) 기존 경로로 간다. 애니메이션 여부는 파일 머리를 로컬에서 읽어 판단한다.
+        if (features == null && imageIndex == 0 && isPlainParam(param) && isLocalStill(data())) {
+            return readStillWithoutFeatures();
+        }
         checkIndex(imageIndex);
         if (param != null && (param.getSourceBands() != null || param.getDestinationBands() != null)) {
             throw new IllegalArgumentException("source/destination bands are not supported");
@@ -229,6 +235,63 @@ final class WebPImageReader extends ImageReader {
         }
         processImageComplete();
         return dest;
+    }
+
+    private BufferedImage readStillWithoutFeatures() throws IOException {
+        clearAbortRequest();
+        processImageStarted(0);
+        long maxPixels = client().config().maxPixels();
+        BufferedImage[] dest = new BufferedImage[1];
+        // getImageTypes와 같은 규칙: alpha가 있으면 TYPE_INT_ARGB, 없으면 TYPE_INT_RGB(ADR-0013).
+        ArgbFrameSink sink = ArgbFrameSink.allocatingOnHeader(maxPixels, h -> {
+            dest[0] = new BufferedImage(h.getWidth(), h.getHeight(),
+                    h.getHasAlpha() ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
+            return ((DataBufferInt) dest[0].getRaster().getDataBuffer()).getData();
+        });
+        ProgressReceiver receiver = new ProgressReceiver(sink, 0, -1);
+        try {
+            client().decode(data(), decodeOptions(0, maxPixels), receiver);
+        } catch (IIOException e) {
+            if (abortRequested()) {
+                processReadAborted();
+                return dest[0];
+            }
+            throw e;
+        }
+        processImageComplete();
+        return dest[0];
+    }
+
+    /** 영역, 서브샘플링, 대상 이미지·타입·오프셋, 밴드를 하나도 지정하지 않은 파라미터인지. */
+    static boolean isPlainParam(ImageReadParam param) {
+        if (param == null) {
+            return true;
+        }
+        java.awt.Point offset = param.getDestinationOffset();
+        return param.getSourceRegion() == null
+                && param.getSourceXSubsampling() == 1 && param.getSourceYSubsampling() == 1
+                && param.getSubsamplingXOffset() == 0 && param.getSubsamplingYOffset() == 0
+                && param.getDestination() == null && param.getDestinationType() == null
+                && (offset == null || (offset.x == 0 && offset.y == 0))
+                && param.getSourceBands() == null && param.getDestinationBands() == null;
+    }
+
+    /**
+     * 파일 머리만 보고 애니메이션이 아닌 WebP인지 판단한다(네트워크 없음, RFC 9649 §2.4–2.7). 첫 청크가 {@code VP8 } 또는
+     * {@code VP8L}이면 정지 이미지이고, {@code VP8X}면 플래그의 애니메이션 비트(0x02)가 꺼져 있을 때 정지 이미지다. 판단할 수
+     * 없으면 false(기존 경로가 서버에서 검증한다).
+     */
+    static boolean isLocalStill(byte[] d) {
+        if (d.length < 21 || d[0] != 'R' || d[1] != 'I' || d[2] != 'F' || d[3] != 'F'
+                || d[8] != 'W' || d[9] != 'E' || d[10] != 'B' || d[11] != 'P' || d[12] != 'V' || d[13] != 'P'
+                || d[14] != '8') {
+            return false;
+        }
+        return switch (d[15]) {
+            case ' ', 'L' -> true;
+            case 'X' -> (d[20] & 0x02) == 0;
+            default -> false;
+        };
     }
 
     private static DecodeOptions decodeOptions(int frameIndex, long maxPixels) {
@@ -322,15 +385,16 @@ final class WebPImageReader extends ImageReader {
     private final class ProgressReceiver implements WebPClient.FrameReceiver {
         private final ArgbFrameSink sink;
         private final int frameIndex;
-        private final long totalBytes;
+        private long totalBytes;
         private long received;
         private int lastPercent = -1;
         private boolean started;
 
+        /** totalBytes가 0 이하이면 헤더의 pixel_bytes를 쓴다(크기를 미리 모를 때). */
         ProgressReceiver(ArgbFrameSink sink, int frameIndex, long totalBytes) {
             this.sink = sink;
             this.frameIndex = frameIndex;
-            this.totalBytes = Math.max(1, totalBytes);
+            this.totalBytes = totalBytes;
         }
 
         /** 헤더를 이미 받았으면 true(그 뒤의 실패는 다른 경로로 다시 받을 수 없다). */
@@ -345,6 +409,9 @@ final class WebPImageReader extends ImageReader {
             }
             started = true;
             sink.header(header);
+            if (totalBytes <= 0) {
+                totalBytes = header.getPixelBytes();
+            }
         }
 
         @Override
@@ -354,7 +421,7 @@ final class WebPImageReader extends ImageReader {
             }
             sink.pixels(chunk);
             received += chunk.size();
-            int percent = (int) (received * 100 / totalBytes);
+            int percent = (int) (received * 100 / Math.max(1, totalBytes));
             if (percent != lastPercent) {
                 lastPercent = percent;
                 processImageProgress(percent);

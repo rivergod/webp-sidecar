@@ -234,12 +234,31 @@ fn rgba_len(width: u32, height: u32) -> Result<usize, WebpError> {
 ///
 /// 오류: 손상·잘림은 [`WebpError::InvalidData`], 버퍼 할당 실패는 [`WebpError::OutOfMemory`].
 pub fn decode_still_rgba(data: &[u8], features: &Features) -> Result<Vec<u8>, WebpError> {
+    let mut pixels = Vec::new();
+    decode_still_rgba_into(data, features, &mut pixels)?;
+    Ok(pixels)
+}
+
+/// [`decode_still_rgba`]와 같고, 결과를 `out`에 쓴다. `out`의 기존 용량을 재사용하고, 모자라면 늘린다.
+///
+/// 출력 버퍼를 0으로 미리 채우지 않는다(libwebp가 모든 바이트를 쓴다). 성공하면 `out.len()`이 width × height × 4이고,
+/// 실패하면 `out`은 비어 있다(이전 내용이 결과로 보이지 않는다).
+///
+/// 오류: [`decode_still_rgba`]와 같다.
+pub fn decode_still_rgba_into(data: &[u8], features: &Features, out: &mut Vec<u8>) -> Result<(), WebpError> {
+    out.clear();
     if features.has_animation {
         return Err(WebpError::InvalidArgument(
             "animated WebP must be decoded with the animation decoder".into(),
         ));
     }
-    let mut pixels = alloc_rgba(features.width, features.height)?;
+    let len = rgba_len(features.width, features.height)?;
+    out.try_reserve_exact(len).map_err(|_| {
+        WebpError::OutOfMemory(format!(
+            "cannot allocate {len} bytes for {}x{} RGBA",
+            features.width, features.height
+        ))
+    })?;
     let stride = features.width as usize * BYTES_PER_PIXEL;
 
     // 출력 버퍼를 직접 할당해 넘긴다(external memory). libwebp가 따로 큰 버퍼를 잡지 않는다.
@@ -252,21 +271,24 @@ pub fn decode_still_rgba(data: &[u8], features: &Features) -> Result<Vec<u8>, We
     let mut config = unsafe { config.assume_init() };
     config.output.colorspace = sys::WEBP_CSP_MODE::MODE_RGBA;
     config.output.is_external_memory = 1;
+    // 초기화하지 않은 여유 용량(len 바이트 이상)에 libwebp가 직접 쓴다. 길이는 성공한 뒤에만 늘린다.
     config.output.u.RGBA = sys::WebPRGBABuffer {
-        rgba: pixels.as_mut_ptr(),
+        rgba: out.as_mut_ptr(),
         stride: stride as c_int,
-        size: pixels.len(),
+        size: len,
     };
     config.options.use_threads = 0;
 
-    // SAFETY: data와 pixels는 호출 동안 유효하고, pixels는 stride × height 바이트다.
+    // SAFETY: data는 호출 동안 유효하고, out은 len = stride × height 바이트 이상의 용량을 가진다.
     let status = unsafe { decode_raw(data.as_ptr(), data.len(), &mut config) };
     // SAFETY: external memory라 libwebp가 해제할 내부 버퍼는 없지만, 규약대로 호출한다.
     unsafe { sys::WebPFreeDecBuffer(&mut config.output) };
     if status != VP8_STATUS_OK {
         return Err(status_error("WebPDecode", status));
     }
-    Ok(pixels)
+    // SAFETY: 디코딩이 성공하면 libwebp가 출력 영역(stride × height = len 바이트)을 모두 썼다.
+    unsafe { out.set_len(len) };
+    Ok(())
 }
 
 /// 출력 바이트를 모으는 `WebPMemoryWriter`. Drop에서 libwebp 메모리를 해제한다.
