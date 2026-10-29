@@ -9,7 +9,7 @@
 | Phase 2 | JVM SPI 클라이언트(정지 이미지) + 통합 테스트 | 완료 (2026-10-23) |
 | Phase 3 | 애니메이션 + ICC/EXIF/XMP | 완료 (2026-10-23) |
 | Phase 4 | JMH 벤치마크 + 결과 보고서 | 완료 (2026-10-23, JDeli는 요청 시) |
-| Phase 5 | 보안 강화(seccomp, 퍼징) + 성능 보강 + proto 회고 | 완료 기준 충족, 결정 대기 (ADR-0016–0020 승인, 계속/중단) |
+| Phase 5 | 보안 강화(seccomp, 퍼징) + 성능 보강 + proto 회고 | 완료 (2026-10-29). 사이드카 구조로 확정(ADR-0019). ADR-0016·0017·0018·0020 결정 대기 |
 
 ## Phase 0: 기반 정리
 
@@ -116,5 +116,5 @@
 
 ### 5-3. proto 회고
 
-- [x] proto 회고 ADR(계속/중단 판단과 근거)을 `proposed`로 작성한다. — [ADR-0019](adr/0019-prototype-retrospective.md)(proposed): **계속을 추천**. 16/18 충족, 남은 alpha 격차는 서버 안 libwebp 쪽이라 후속 조사. `webp.v1` 유지(필드 추가만). 입력: Phase 4 판정, 5-1 보안 검증 결과, 5-2 재판정, proto 변경 안건(픽셀 포맷, 총 출력 픽셀 상한, GetFeatures/Decode 중복). 계속/중단 결정은 결정자가 한다.
+- [x] proto 회고 ADR(계속/중단 판단과 근거)을 `proposed`로 작성한다. — [ADR-0019](adr/0019-prototype-retrospective.md): **사이드카 구조로 확정**(accepted, 결정자 2026-10-29). 16/18 충족, 남은 alpha 격차는 서버 안 libwebp 쪽이라 후속 조사. `webp.v1` 유지(필드 추가만). 입력: Phase 4 판정, 5-1 보안 검증 결과, 5-2 재판정, proto 변경 안건(픽셀 포맷, 총 출력 픽셀 상한, GetFeatures/Decode 중복). 계속/중단 결정은 결정자가 한다.
 - [x] ImageIO 설정 주입(공개 설정 타입, SPI 수동 등록, ReadParam/WriteParam) ADR을 `proposed`로 작성한다. — [ADR-0020](adr/0020-imageio-config-injection.md)(proposed)
