@@ -2,7 +2,7 @@
 
 - 상태: 초안
 - 작성일/측정일: 2026-10-29
-- 관련: [ADR-0016](../adr/0016-memory-budget-admission.md)(메모리 예산, proposed), [ADR-0017](../adr/0017-output-volume-limits.md)(작업량 상한, accepted·구현), [ADR-0012](../adr/0012-server-runtime-config.md)(서버 상한과 동시 처리), [design/grpc-api.md](../design/grpc-api.md) §2.5
+- 관련: [ADR-0016](../adr/0016-memory-budget-admission.md)(메모리 예산, accepted), [ADR-0017](../adr/0017-output-volume-limits.md)(작업량 상한, accepted·구현), [ADR-0012](../adr/0012-server-runtime-config.md)(서버 상한과 동시 처리), [design/grpc-api.md](../design/grpc-api.md) §2.5
 - 원자료: [bench/results/2026-10-29-gif/](../../bench/results/2026-10-29-gif/)(`single.tsv`, `gif2webp.tsv`, `load.txt`, `load-before-h2fix.txt`, `environment*.txt`), ADR-0017 구현 뒤 재측정 [bench/results/2026-10-29-gif-adr0017/](../../bench/results/2026-10-29-gif-adr0017/)
 - 도구: `bench/gif.sh`, `bench/src/main/java/.../bench/GifBench.java`(측정), `GifFrames.java`(GIF 합성), `GifInputs.java`(합성 GIF)
 

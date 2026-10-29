@@ -70,7 +70,7 @@ docs/
 | [0013](adr/0013-client-package-and-imageio-mapping.md) | 클라이언트 패키지와 ImageIO 매핑 | accepted |
 | [0014](adr/0014-animation-and-metadata-mapping.md) | 애니메이션·메타데이터 매핑 | accepted |
 | [0015](adr/0015-benchmark-method.md) | 벤치마크 방법: 환경, 샘플, SIMD 빌드, Wasm 비교 구현 | accepted |
-| [0016](adr/0016-memory-budget-admission.md) | 메모리 예산 기반 요청 허용 | proposed |
+| [0016](adr/0016-memory-budget-admission.md) | 메모리 예산 기반 요청 허용 | accepted |
 | [0017](adr/0017-output-volume-limits.md) | 요청당 작업량 상한: 합성 픽셀 수 상한, 서버 쪽 요청 시간 상한, 대기 상한 | accepted |
 | [0018](adr/0018-decode-output-buffer-pool.md) | 정지 이미지 디코딩 출력 버퍼 재사용(버퍼 풀)과 만료 정책 | accepted |
 | [0019](adr/0019-prototype-retrospective.md) | 프로토타입 회고: 사이드카 구조를 계속한다(proto `webp.v1` 유지) | accepted |
