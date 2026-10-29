@@ -2,6 +2,7 @@
 //!
 //! 키 표: docs/design/grpc-api.md §3.1. 환경변수 조회를 함수로 주입받아 테스트가 프로세스 환경에 의존하지 않게 한다.
 
+use crate::pool::PoolConfig;
 use clap::Parser;
 use std::fmt;
 use std::net::SocketAddr;
@@ -48,6 +49,12 @@ pub struct Cli {
     /// 동시에 libwebp 작업을 하는 요청 수 [env: WEBP_SERVER_MAX_CONCURRENCY] [기본: 2]
     #[arg(long)]
     pub max_concurrency: Option<String>,
+    /// 정지 이미지 출력 버퍼 풀 총량 상한(바이트). 0이면 끈다 [env: WEBP_SERVER_BUFFER_POOL_BYTES] [기본: 134217728]
+    #[arg(long)]
+    pub buffer_pool_bytes: Option<String>,
+    /// 풀 버퍼 유휴 만료(ms) [env: WEBP_SERVER_BUFFER_POOL_IDLE_MS] [기본: 30000]
+    #[arg(long)]
+    pub buffer_pool_idle_ms: Option<String>,
 }
 
 /// 서버가 적용하는 상한. `GetInfo`의 `Limits`로 그대로 노출한다(docs/design/grpc-api.md §3).
@@ -91,6 +98,8 @@ pub struct Config {
     pub limits: Limits,
     /// 동시에 libwebp 작업을 하는 요청 수(1 이상).
     pub max_concurrency: usize,
+    /// 정지 이미지 출력 버퍼 풀(ADR-0018).
+    pub buffer_pool: PoolConfig,
 }
 
 /// 설정 값을 해석하거나 검증하다 실패했다.
@@ -215,12 +224,32 @@ impl Config {
         if max_concurrency == 0 {
             return Err(ConfigError("max_concurrency must be >= 1".into()));
         }
+        let pool_default = PoolConfig::default();
+        let buffer_pool_bytes = parse_num(
+            cli.buffer_pool_bytes.as_deref(),
+            "WEBP_SERVER_BUFFER_POOL_BYTES",
+            pool_default.max_bytes,
+            &env,
+        )?;
+        let buffer_pool_idle_ms = parse_num(
+            cli.buffer_pool_idle_ms.as_deref(),
+            "WEBP_SERVER_BUFFER_POOL_IDLE_MS",
+            pool_default.idle.as_millis() as u64,
+            &env,
+        )?;
+        if buffer_pool_idle_ms == 0 {
+            return Err(ConfigError("buffer_pool_idle_ms must be >= 1".into()));
+        }
         Ok(Self {
             uds_path,
             uds_mode,
             tcp_addr,
             limits,
             max_concurrency,
+            buffer_pool: PoolConfig {
+                max_bytes: buffer_pool_bytes,
+                idle: std::time::Duration::from_millis(buffer_pool_idle_ms),
+            },
         })
     }
 }
