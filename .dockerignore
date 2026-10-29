@@ -7,3 +7,5 @@ samples/bench
 samples/conformance
 spikes
 bench/wasm/build
+# 서버 퍼저(server/fuzz)는 서버 이미지에 필요 없다. 로컬 코퍼스가 커서 빌드 컨텍스트에서 뺀다.
+server/fuzz

@@ -1,0 +1,5 @@
+# 퍼저 실행 산출물(커밋하지 않는다). 발견한 입력은 재현 테스트로 옮긴다.
+/target/
+/corpus/
+/artifacts/
+/coverage/
