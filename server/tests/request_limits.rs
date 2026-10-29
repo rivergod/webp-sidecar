@@ -22,6 +22,7 @@ fn policy(max_queued: usize, max_request_ms: u64) -> RequestPolicy {
     RequestPolicy {
         max_queued_requests: max_queued,
         max_request: Duration::from_millis(max_request_ms),
+        ..RequestPolicy::default()
     }
 }
 

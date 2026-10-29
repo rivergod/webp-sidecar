@@ -49,11 +49,34 @@ impl TestServer {
 
     /// 대기·시간 상한(ADR-0017)을 지정해 띄운다.
     pub async fn start_with_policy(limits: Limits, max_concurrency: usize, policy: RequestPolicy) -> Self {
+        Self::start_with_pool(limits, max_concurrency, PoolConfig::default(), policy).await
+    }
+
+    /// 요청 몫의 메모리 예산(ADR-0016)을 `budget_bytes`로 정해 띄운다. 출력 버퍼 풀은 끈다(예산 = `max_memory_bytes`).
+    pub async fn start_with_budget(max_concurrency: usize, budget_bytes: u64) -> Self {
+        let policy = RequestPolicy {
+            max_memory_bytes: budget_bytes,
+            ..RequestPolicy::default()
+        };
+        let pool = PoolConfig {
+            max_bytes: 0,
+            ..PoolConfig::default()
+        };
+        Self::start_with_pool(Limits::default(), max_concurrency, pool, policy).await
+    }
+
+    /// 상한, 동시 처리 수, 출력 버퍼 풀, 요청 허용 정책을 모두 지정해 띄운다.
+    pub async fn start_with_pool(
+        limits: Limits,
+        max_concurrency: usize,
+        pool: PoolConfig,
+        policy: RequestPolicy,
+    ) -> Self {
         let dir = tempfile::tempdir().expect("tempdir");
         let socket = dir.path().join("webp.sock");
         let listener = UnixListener::bind(&socket).expect("bind uds");
         let (stop, stopped) = oneshot::channel::<()>();
-        let service = WebpService::with_config(limits, max_concurrency, BufferPool::new(PoolConfig::default()), policy);
+        let service = WebpService::with_config(limits, max_concurrency, BufferPool::new(pool), policy);
         let router = router(service).await;
         tokio::spawn(
             router.serve_with_incoming_shutdown(UnixListenerStream::new(listener), async {

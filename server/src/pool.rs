@@ -150,9 +150,16 @@ impl BufferPool {
 
     /// 버퍼를 [`Bytes`]로 감싼다. 이 `Bytes`와 그 조각(`slice`)이 모두 해제되면 버퍼가 풀로 돌아온다.
     pub fn wrap(&self, buf: Vec<u8>) -> Bytes {
+        self.wrap_with(buf, ())
+    }
+
+    /// [`BufferPool::wrap`]과 같고, 버퍼가 풀로 돌아간 **뒤에** `guard`를 버린다. 요청의 메모리 예약(ADR-0016)을
+    /// 붙여 두면 응답 조각이 남아 있는 동안 예약도 유지된다.
+    pub fn wrap_with<G: Send + 'static>(&self, buf: Vec<u8>, guard: G) -> Bytes {
         Bytes::from_owner(Pooled {
             buf,
             pool: self.clone(),
+            _guard: guard,
         })
     }
 }
@@ -174,19 +181,21 @@ impl State {
     }
 }
 
-/// [`BufferPool::wrap`]의 소유자. 해제될 때 버퍼를 풀로 돌려놓는다.
-struct Pooled {
+/// [`BufferPool::wrap_with`]의 소유자. 해제될 때 버퍼를 풀로 돌려놓고, 그다음 `_guard`를 버린다(필드는 `drop` 뒤에
+/// 해제된다).
+struct Pooled<G> {
     buf: Vec<u8>,
     pool: BufferPool,
+    _guard: G,
 }
 
-impl AsRef<[u8]> for Pooled {
+impl<G> AsRef<[u8]> for Pooled<G> {
     fn as_ref(&self) -> &[u8] {
         &self.buf
     }
 }
 
-impl Drop for Pooled {
+impl<G> Drop for Pooled<G> {
     fn drop(&mut self) {
         self.pool.give(std::mem::take(&mut self.buf));
     }
@@ -312,5 +321,28 @@ mod tests {
         // Assert
         assert_eq!(p.pooled_buffers(), 1);
         assert_eq!(p.take(64).len(), 0);
+    }
+
+    #[test]
+    fn wrap_with_drops_guard_after_buffer_is_back_in_pool() {
+        // Arrange: guard가 해제될 때 풀에 버퍼가 이미 돌아와 있었는지 기록한다
+        struct Probe(BufferPool, std::sync::Arc<std::sync::atomic::AtomicUsize>);
+        impl Drop for Probe {
+            fn drop(&mut self) {
+                self.1
+                    .store(self.0.pooled_buffers() + 1, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+        let p = pool(1 << 20, 60_000);
+        let seen = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut v = buffer(64);
+        v.extend_from_slice(&[1u8; 64]);
+        let bytes = p.wrap_with(v, Probe(p.clone(), seen.clone()));
+
+        // Act
+        drop(bytes);
+
+        // Assert: 0은 아직 해제 안 됨, 1은 버퍼 없이 해제, 2는 버퍼가 돌아온 뒤 해제
+        assert_eq!(seen.load(std::sync::atomic::Ordering::SeqCst), 2);
     }
 }

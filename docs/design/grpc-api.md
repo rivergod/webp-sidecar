@@ -53,7 +53,7 @@ sequenceDiagram
     R->>R: canDecodeInput: RIFF/WEBP 매직 확인 (로컬)
     R->>S: Decode: options(input_bytes, frame_index=0, max_pixels)
     R->>S: webp_data 조각 … / half-close
-    S->>S: WebPGetFeatures로 크기 확인, 상한 초과면 RESOURCE_EXHAUSTED
+    S->>S: 머리로 WebPGetFeatures, 상한 초과면 RESOURCE_EXHAUSTED, 추정 메모리 예약 → 슬롯(§3.3)
     S->>S: WebPDecodeRGBAInto
     S-->>R: header(width, height, RGBA8, pixel_bytes)
     R->>R: pixel_bytes를 클라이언트 상한과 비교한 뒤 버퍼 할당
@@ -70,7 +70,7 @@ sequenceDiagram
 
 ### 2.5 동시 처리 슬롯과 HTTP/2 흐름 제어
 
-서버는 요청마다 동시 처리 슬롯(`max_concurrency`, 기본 2)을 잡은 뒤에야 입력을 읽는다. 입력 버퍼를 슬롯 수만큼만 잡으려는 것이다(Phase 1). 슬롯을 기다리는 요청이 이미 보낸 데이터는 읽히지 않은 채 그 연결의 HTTP/2 수신 창을 차지한다.
+서버는 요청마다 메모리 예약과 동시 처리 슬롯(`max_concurrency`, 기본 2)을 잡은 뒤에야 입력을 읽는다. 입력 버퍼를 예산과 슬롯 안에서만 잡으려는 것이다(Phase 1, ADR-0016). 디코딩 RPC는 메모리 추정에 필요한 머리(64바이트, 대개 첫 조각 하나)만 먼저 읽는다(§3.3). 기다리는 요청이 그 뒤에 보낸 데이터는 읽히지 않은 채 그 연결의 HTTP/2 수신 창을 차지한다.
 
 - **교착 조건**: 한 연결(클라이언트 JVM의 채널 하나)에서 대기 요청들의 데이터가 연결 수신 창을 다 쓰면, 슬롯을 가진 요청도 더 보낼 수 없다. 끝나지 못하니 슬롯도 풀리지 않는다.
 - **발견 경위**: hyper 기본값(연결 창 = 스트림 창 = 1 MiB)에서는 대기 요청 하나로 이 교착이 났다. GIF 변환 동시 부하 측정에서 동시 4건 이상이 모두 데드라인을 넘었다(research/0012).
@@ -99,24 +99,11 @@ sequenceDiagram
 - **상한은 서버 설정값이다**(결정 2026-10-23). 코드에 고정하지 않고 서버가 시작할 때 설정에서 읽어 적용하며, `GetInfo`의 `Limits`로 그대로 노출한다. 설정 키는 §3.1, 기본값은 [ADR-0012](../adr/0012-server-runtime-config.md).
 - 서버는 시작할 때 설정값을 검사한다. `max_chunk_bytes`와 `max_metadata_bytes`는 메시지 하나에 실리므로 gRPC 기본 메시지 한도(4MB)보다 작아야 한다(ADR-0003의 불변식). 어기면 시작하지 않는다.
 - 픽셀 수 상한이 필요한 근거: VP8X 캔버스만 16384×16384로 바꾼 298바이트짜리 유효한 애니메이션 파일 하나로 디코더가 1GiB 할당을 시도한다([research/0005](../research/0005-test-samples.md) "손상/악성 입력").
-- **기본값 근거(측정 2026-10-23, [research/0007](../research/0007-server-memory-budget.md))**: 컨테이너 1 GiB·동시 처리 2에서 8192² 정지 이미지 디코딩 두 개를 동시에 처리해도 최고 661 MiB로 안에 든다. 인코딩은 libwebp 인코더가 픽셀당 약 31–36 B를 써서 8192² 하나로도 OOM이다. 기본값 조정안(메모리 예산 기반 허용)은 [ADR-0016](../adr/0016-memory-budget-admission.md)(proposed).
+- **기본값 근거(측정 2026-10-23, [research/0007](../research/0007-server-memory-budget.md))**: 컨테이너 1 GiB·동시 처리 2에서 8192² 정지 이미지 디코딩 두 개를 동시에 처리해도 최고 661 MiB로 안에 든다. 인코딩은 libwebp 인코더가 픽셀당 약 31–36 B를 써서 8192² 하나로도 OOM이다. 이 OOM은 메모리 예산 기반 허용([ADR-0016](../adr/0016-memory-budget-admission.md), §3.3)으로 막는다.
 - 클라이언트는 `DecodeOptions.max_pixels`로 더 엄격한 상한을 보낼 수 있다. 서버는 둘 중 작은 값을 적용한다.
 - 클라이언트도 응답 `FrameHeader`를 받으면 할당 전에 다시 검증한다. Java 배열 한도(약 2^31 원소) 때문에 RGBA8 `byte[]` 하나로는 약 5.3억 픽셀을 넘을 수 없다. libwebp 최대 크기(16383 × 16383 ≈ 2.7억 픽셀)는 그 안에 든다.
 - 정지 이미지는 `WebPGetFeatures`로, 애니메이션은 `WebPDemux`의 캔버스 크기와 프레임 수로 검사한다.
 - **요청당 작업량**(ADR-0017): `max_composited_pixels`는 출력량 폭탄(작은 캔버스·많은 프레임처럼 하나하나는 상한 안이지만 곱이 큰 파일)을 픽셀을 만들기 전에 거부한다. 이와 별도로 서버는 요청마다 시간 상한(`max_request_ms`)과 대기 상한(`max_queued_requests`)을 둔다(§3.2).
-
-### 3.2 요청 시간 상한과 대기 상한
-
-[ADR-0017](../adr/0017-output-volume-limits.md). `Limits`에는 넣지 않는다(입력 검사가 아니라 서버 운영 정책이다).
-
-| 정책 | 정의 | 넘을 때 |
-|---|---|---|
-| `max_request_ms` | 동시 처리 슬롯을 잡은 때부터 응답을 다 보낼 때까지의 벽시계 시간. 입력 조각 수신, 프레임 사이, 응답 조각 전송이 모두 남은 시간만큼만 기다린다 | `DEADLINE_EXCEEDED`("request exceeded max_request_ms on the server")로 끝내고 슬롯을 놓는다. 이미 보낸 응답 뒤에 오류가 오므로 클라이언트는 잘린 응답을 정상 끝으로 보지 않는다 |
-| `max_queued_requests` | 슬롯을 기다리는 요청 수(서버 전체) | 기다리지 않고 바로 `UNAVAILABLE`("server busy: N requests queued ...; retry later") |
-
-- 시간 상한은 libwebp 함수 한 번(정지 이미지 디코딩·인코딩 한 번) 안에서는 멈추지 못한다. 그 시간은 `max_pixels`가 묶는다.
-- 대기 중인 요청이 취소되면 대기 자리도 바로 돌려준다.
-- 모든 RPC는 첫 메시지(`options`)를 받아 선언 크기를 검사한 뒤 슬롯을 잡는다. 시간 상한은 그때부터 잰다. 슬롯을 기다리는 시간은 클라이언트 데드라인만 묶는다.
 
 ### 3.1 서버 설정 키
 
@@ -137,11 +124,52 @@ sequenceDiagram
 | `--buffer-pool-idle-ms` | `WEBP_SERVER_BUFFER_POOL_IDLE_MS` | `30000` | 풀 버퍼 유휴 만료(ADR-0018) |
 | `--max-composited-pixels` | `WEBP_SERVER_MAX_COMPOSITED_PIXELS` | `1073741824` (2^30) | `Limits.max_composited_pixels`. 요청 하나의 합성 픽셀 수(캔버스 × 프레임) 상한([ADR-0017](../adr/0017-output-volume-limits.md)) |
 | `--max-request-ms` | `WEBP_SERVER_MAX_REQUEST_MS` | `60000` | 슬롯을 잡은 뒤 요청 하나의 시간 상한(ADR-0017) |
-| `--max-queued-requests` | `WEBP_SERVER_MAX_QUEUED_REQUESTS` | `8` | 슬롯을 기다릴 수 있는 요청 수, 0이면 상한 없음(ADR-0017) |
+| `--max-queued-requests` | `WEBP_SERVER_MAX_QUEUED_REQUESTS` | `8` | 메모리나 슬롯을 기다릴 수 있는 요청 수, 0이면 상한 없음(ADR-0017) |
+| `--max-memory-bytes` | `WEBP_SERVER_MAX_MEMORY_BYTES` | `805306368` (768 MiB) | 요청들과 출력 버퍼 풀이 함께 쓸 메모리 합계. `buffer_pool_bytes`보다 커야 한다([ADR-0016](../adr/0016-memory-budget-admission.md), §3.3) |
 
 로그 수준은 `RUST_LOG` 환경변수로 정한다(Rust `tracing` 관례).
 
 - 기본값 조합의 메모리 예산 위험(애니메이션 디코더가 캔버스 버퍼 2개를 쓴다)은 ADR-0012 "결과"를 본다.
+
+### 3.2 요청 시간 상한과 대기 상한
+
+[ADR-0017](../adr/0017-output-volume-limits.md). `Limits`에는 넣지 않는다(입력 검사가 아니라 서버 운영 정책이다).
+
+| 정책 | 정의 | 넘을 때 |
+|---|---|---|
+| `max_request_ms` | 동시 처리 슬롯을 잡은 때부터 응답을 다 보낼 때까지의 벽시계 시간. 입력 조각 수신, 프레임 사이, 응답 조각 전송이 모두 남은 시간만큼만 기다린다 | `DEADLINE_EXCEEDED`("request exceeded max_request_ms on the server")로 끝내고 슬롯을 놓는다. 이미 보낸 응답 뒤에 오류가 오므로 클라이언트는 잘린 응답을 정상 끝으로 보지 않는다 |
+| `max_queued_requests` | 메모리나 슬롯을 기다리는 요청 수(서버 전체). 디코딩 RPC가 머리를 읽는 동안도 센다(§3.3) | 기다리지 않고 바로 `UNAVAILABLE`("server busy: N requests queued ...; retry later") |
+
+- 시간 상한은 libwebp 함수 한 번(정지 이미지 디코딩·인코딩 한 번) 안에서는 멈추지 못한다. 그 시간은 `max_pixels`가 묶는다.
+- 대기 중인 요청이 취소되면 대기 자리도 바로 돌려준다.
+- 모든 RPC는 첫 메시지(`options`)를 받아 선언 크기를 검사한 뒤 메모리와 슬롯을 잡는다. 시간 상한은 슬롯을 잡은 때부터 잰다. 메모리와 슬롯을 기다리는 시간은 클라이언트 데드라인만 묶는다. 디코딩 RPC의 머리 읽기는 `max_request_ms`까지만 기다린다.
+
+### 3.3 메모리 예산
+
+[ADR-0016](../adr/0016-memory-budget-admission.md). 요청마다 추정 메모리를 예산에서 예약하고, 예약할 수 있어야 슬롯을 잡는다. `Limits`에는 넣지 않는다(§3.2와 같은 운영 정책이다).
+
+- **예산**: `max_memory_bytes`(기본 768 MiB)에서 출력 버퍼 풀 총량 상한(`buffer_pool_bytes`, 기본 128 MiB)을 **고정으로** 뺀 값이다. 기본값으로 요청들이 640 MiB를 나눠 쓴다. 풀은 자기 상한 안에서 따로 관리하므로 둘의 합이 `max_memory_bytes`를 넘지 않는다.
+  - ADR-0016의 "예약할 수 없으면 풀을 비우고 다시 시도한다"는 구현하지 않는다. 고정으로 빼면 풀을 비워도 예약 가능량이 늘지 않기 때문이다(결정자 확인 2026-10-29).
+- **추정식**(단위: 바이트, `px` = 캔버스 픽셀 수):
+
+| RPC | 추정 | 예약 시점 |
+|---|---|---|
+| GetFeatures | 입력 크기 | `options` 뒤 |
+| Decode, DecodeAnimation | 입력 크기 + 6 × px(정지 이미지), 10 × px(애니메이션) | 머리를 읽은 뒤. 입력을 다 받은 뒤 다시 세어 모자라면 더 예약한다 |
+| Encode | 40 × px(입력 버퍼 포함) | `options` 뒤 |
+| EncodeAnimation | 60 × px + 프레임마다 1 × px(lossless), 0.25 × px(lossy) | 캔버스 몫은 `options` 뒤, 프레임 몫은 프레임을 받을 때마다 |
+
+- **순서**: 메모리 예약을 먼저 기다리고, 그다음 슬롯을 기다린다. 메모리를 못 잡은 요청은 슬롯을 차지하지 않는다. 메모리는 먼저 온 요청부터 받는다(큰 요청이 굶지 않는다).
+- **거부**: 혼자서도 예산을 넘는 요청은 기다리지 않고 `RESOURCE_EXHAUSTED`("estimated memory N bytes exceeds the memory budget ...")로 거부한다. 기본값으로 정지 이미지 인코딩은 4096²까지 들어간다(40 × 4096² = 640 MiB). 캔버스가 8192²인 애니메이션 디코딩은 거부된다(10 × 8192² = 640 MiB에 입력 크기가 더해진다). 8192² 정지 이미지 디코딩은 약 448 MiB(입력 64 MiB 포함)로 들어간다. 애니메이션 인코딩은 캔버스 약 1,118만 픽셀(약 3344²)까지이고, 프레임 몫만큼 더 작아진다.
+- **요청 중간의 추가 예약은 기다리지 않는다**: 애니메이션 인코딩의 프레임 몫, 그리고 디코딩에서 입력을 다 받은 뒤 다시 센 추정치가 머리로 센 값보다 클 때다. 모자라면 `RESOURCE_EXHAUSTED`("memory budget exhausted ...")로 끝내고 잡은 예약과 슬롯을 놓는다. 슬롯과 예약을 쥔 채 기다리면 서로 놓기를 기다리는 교착이 생기기 때문이다.
+- **머리 먼저 읽기**(디코딩 RPC): 캔버스 크기는 데이터 안의 헤더에만 있다. 그래서 대기 자리를 먼저 잡고 머리(64바이트 이상, 대개 첫 조각 하나)를 받는다. 그 뒤에 추정치를 예약하고 슬롯을 잡는다.
+  - 머리를 들고 기다리는 요청 수도 대기 상한(§3.2)으로 묶인다. 요청 하나가 드는 머리는 조각 몇 개, 최대 `max_chunk_bytes` 남짓이다.
+  - 머리에서 캔버스가 `max_pixels`를 넘으면 나머지를 받기 전에 거부한다.
+  - 머리에서 헤더를 읽지 못하면(손상, 아주 작은 조각) 입력 크기만 예약한다. 헤더 오류는 입력을 다 받은 뒤 이전처럼 낸다.
+- **예약의 수명**: 정지 이미지 디코딩과 인코딩은 예약을 응답 버퍼에 붙인다. 응답 조각이 모두 해제되어 버퍼가 풀로 돌아가거나 해제된 뒤에 예약이 풀린다. 애니메이션 디코딩은 디코더가 끝날 때 풀린다. 응답 스트림이 끝나면(정상이든 시간 상한이든) 서버는 아직 읽히지 않은 응답 조각을 바로 버린다.
+- **한계**: 추정식은 측정 기반 근사다(research/0007, research/0012). libwebp 버전이나 인코더 설정이 바뀌면 다시 잰다. 아래는 예산 밖이다.
+  - 응답 채널에 있는 애니메이션 프레임 조각 사본: 요청마다 최대 4 × `max_chunk_bytes`.
+  - gRPC 전송 버퍼.
 
 ## 4. 오류 매핑
 
@@ -156,6 +184,7 @@ sequenceDiagram
 | WebP가 아님, 손상, 잘림 | `INVALID_ARGUMENT` | `VP8_STATUS_BITSTREAM_ERROR`, `VP8_STATUS_NOT_ENOUGH_DATA`, `VP8_STATUS_UNSUPPORTED_FEATURE`, `WEBP_MUX_BAD_DATA` | `IIOException("Invalid or corrupted WebP data: <message>", cause)` |
 | 프로토콜 위반 (메시지 순서, 선언 크기 불일치, 조각 크기 초과), 잘못된 옵션 | `INVALID_ARGUMENT` | - | `IIOException` (클라이언트 버그이므로 메시지에 RPC 이름 포함) |
 | 서버 상한 초과 | `RESOURCE_EXHAUSTED` | - | `IIOException("WebP image exceeds server limit: <message>", cause)` |
+| 메모리 예산 초과(ADR-0016): 혼자서도 예산을 넘는 요청("estimated memory"), 요청 중간의 추가 예약 실패("memory budget exhausted") | `RESOURCE_EXHAUSTED` | - | 위와 같음. 추가 예약 실패는 혼잡 때문이라 다시 시도하면 될 수 있다 |
 | 메모리 할당 실패 | `RESOURCE_EXHAUSTED` | `VP8_STATUS_OUT_OF_MEMORY`, `WEBP_MUX_MEMORY_ERROR` | 위와 같음. libwebp 1.6.0은 일부 손상 파일(ALPH 예약 비트, ALPH 압축 방식 2)에도 `VP8_STATUS_OUT_OF_MEMORY`를 돌려주므로 메시지에 그 가능성을 적는다(samples/manifest.json) |
 | 프레임 번호 범위 밖 | `OUT_OF_RANGE` | - | 클라이언트가 먼저 `IndexOutOfBoundsException`을 던진다(ImageReader 규약). 서버 응답은 방어선이다. |
 | 아직 구현하지 않은 RPC | `UNIMPLEMENTED` | - | `IIOException` |

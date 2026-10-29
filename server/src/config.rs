@@ -2,7 +2,7 @@
 //!
 //! 키 표: docs/design/grpc-api.md §3.1. 환경변수 조회를 함수로 주입받아 테스트가 프로세스 환경에 의존하지 않게 한다.
 
-use crate::admission::RequestPolicy;
+use crate::admission::{MAX_BUDGET_BYTES, RequestPolicy};
 use crate::pool::PoolConfig;
 use clap::Parser;
 use std::fmt;
@@ -65,6 +65,10 @@ pub struct Cli {
     /// 풀 버퍼 유휴 만료(ms) [env: WEBP_SERVER_BUFFER_POOL_IDLE_MS] [기본: 30000]
     #[arg(long)]
     pub buffer_pool_idle_ms: Option<String>,
+    /// 요청들과 출력 버퍼 풀이 함께 쓸 메모리 합계(바이트). 요청 몫은 풀 총량 상한을 뺀 값
+    /// [env: WEBP_SERVER_MAX_MEMORY_BYTES] [기본: 805306368]
+    #[arg(long)]
+    pub max_memory_bytes: Option<String>,
 }
 
 /// 서버가 적용하는 상한. `GetInfo`의 `Limits`로 그대로 노출한다(docs/design/grpc-api.md §3).
@@ -281,6 +285,20 @@ impl Config {
             policy_default.max_queued_requests,
             &env,
         )?;
+        // ADR-0016: 요청 몫(max_memory_bytes - 풀 총량 상한)이 1 KiB 이상이고 예산 단위(KiB 허가)의 한도 안이어야 한다.
+        let max_memory_bytes = parse_num(
+            cli.max_memory_bytes.as_deref(),
+            "WEBP_SERVER_MAX_MEMORY_BYTES",
+            policy_default.max_memory_bytes,
+            &env,
+        )?;
+        let request_budget = max_memory_bytes.saturating_sub(buffer_pool_bytes);
+        if !(1024..=MAX_BUDGET_BYTES).contains(&request_budget) {
+            return Err(ConfigError(format!(
+                "max_memory_bytes ({max_memory_bytes}) minus buffer_pool_bytes ({buffer_pool_bytes}) must be \
+                 1024..={MAX_BUDGET_BYTES}"
+            )));
+        }
         Ok(Self {
             uds_path,
             uds_mode,
@@ -294,6 +312,7 @@ impl Config {
             request_policy: RequestPolicy {
                 max_queued_requests,
                 max_request: std::time::Duration::from_millis(max_request_ms),
+                max_memory_bytes,
             },
         })
     }
@@ -341,6 +360,44 @@ mod tests {
         assert_eq!(c.limits.max_composited_pixels, 1000);
         assert_eq!(c.request_policy.max_request, std::time::Duration::from_millis(250));
         assert_eq!(c.request_policy.max_queued_requests, 0);
+    }
+
+    #[test]
+    fn resolve_max_memory_bytes_default_is_768_mib() {
+        // when
+        let c = Config::resolve(&Cli::default(), env_of(&[])).unwrap();
+
+        // then
+        assert_eq!(c.request_policy.max_memory_bytes, 768 * 1024 * 1024);
+    }
+
+    #[test]
+    fn resolve_max_memory_bytes_from_env_is_applied() {
+        // when
+        let c = Config::resolve(
+            &Cli::default(),
+            env_of(&[
+                ("WEBP_SERVER_MAX_MEMORY_BYTES", "2147483648"),
+                ("WEBP_SERVER_BUFFER_POOL_BYTES", "0"),
+            ]),
+        )
+        .unwrap();
+
+        // then
+        assert_eq!(c.request_policy.max_memory_bytes, 2 << 30);
+    }
+
+    #[test]
+    fn resolve_max_memory_not_above_buffer_pool_is_rejected() {
+        // when: 기본 풀 128 MiB와 같은 예산이면 요청 몫이 0이다
+        let err = Config::resolve(
+            &Cli::default(),
+            env_of(&[("WEBP_SERVER_MAX_MEMORY_BYTES", "134217728")]),
+        )
+        .unwrap_err();
+
+        // then
+        assert!(err.0.contains("max_memory_bytes"), "{err}");
     }
 
     #[test]

@@ -9,7 +9,7 @@
 | Phase 2 | JVM SPI 클라이언트(정지 이미지) + 통합 테스트 | 완료 (2026-10-23) |
 | Phase 3 | 애니메이션 + ICC/EXIF/XMP | 완료 (2026-10-23) |
 | Phase 4 | JMH 벤치마크 + 결과 보고서 | 완료 (2026-10-23, JDeli는 요청 시) |
-| Phase 5 | 보안 강화(seccomp, 퍼징) + 성능 보강 + proto 회고 | 완료 (2026-10-29). 사이드카 구조로 확정(ADR-0019), 버퍼 풀 확정(ADR-0018), 작업량 상한 확정·구현(ADR-0017), 메모리 예산 확정(ADR-0016, 구현 중). ADR-0020 결정 대기 |
+| Phase 5 | 보안 강화(seccomp, 퍼징) + 성능 보강 + proto 회고 | 완료 (2026-10-29). 사이드카 구조로 확정(ADR-0019), 버퍼 풀 확정(ADR-0018), 작업량 상한 확정·구현(ADR-0017), 메모리 예산 확정·구현(ADR-0016). ADR-0020 결정 대기 |
 
 ## Phase 0: 기반 정리
 
@@ -39,7 +39,7 @@
 - [x] 4MB를 넘는 이미지(예: 3840×2160)가 청크 스트리밍으로 디코딩·인코딩된다. — 3840×2160 lossless 왕복(프로세스 안, 컨테이너 스모크)
 - [x] 손상/악성 입력(잘림, 크기 필드 조작, 거대 크기 선언)이 `INVALID_ARGUMENT` 또는 `RESOURCE_EXHAUSTED`로 거부되고 서버는 계속 응답한다. — 손상 정지 이미지 48개가 libwebp 판정과 같다(samples.rs). 애니메이션 손상 입력은 Phase 3
 - [x] 상한과 소켓 설정을 [ADR-0012](adr/0012-server-runtime-config.md)의 방식(명령줄 인자 + 환경변수, 키는 [grpc-api.md §3.1](design/grpc-api.md))으로 받는다. 코드에 고정하지 않는다. 기본값의 근거를 grpc-api.md §3에 적는다. — config.rs 단위 테스트, 키 표 grpc-api.md §3.1
-- [x] 기본값 조합(메모리 1 GiB, CPU 2, 동시 2)에서 상한 직전 크기의 정지 이미지·애니메이션 디코딩과 인코딩을 동시에 돌려도 OOM이 나지 않는다. 나면 기본값 조정을 새 ADR로 제안한다(ADR-0012의 메모리 예산 위험). — OOM 확인됨(인코딩). 조정안 [ADR-0016](adr/0016-memory-budget-admission.md) accepted(2026-10-29), 측정 [research/0007](research/0007-server-memory-budget.md). 애니메이션 측정은 Phase 3
+- [x] 기본값 조합(메모리 1 GiB, CPU 2, 동시 2)에서 상한 직전 크기의 정지 이미지·애니메이션 디코딩과 인코딩을 동시에 돌려도 OOM이 나지 않는다. 나면 기본값 조정을 새 ADR로 제안한다(ADR-0012의 메모리 예산 위험). — OOM 확인됨(인코딩). 조정안 [ADR-0016](adr/0016-memory-budget-admission.md) accepted·구현(2026-10-29, 재측정 OOM 0건), 측정 [research/0007](research/0007-server-memory-budget.md). 애니메이션 측정은 Phase 3
 - [x] `grpc.health.v1.Health/Check`가 `SERVING`을 돌려준다.
 - [x] Docker 이미지가 non-root, read-only 루트 파일시스템, 외부 네트워크 없음으로 실행되고, 공유 볼륨의 UDS로 호출된다. — server/tests/container.rs, deploy/README.md
 - [x] 서버 단위 테스트와 문서 주석 린터가 통과하고, 그 명령이 `AGENTS.md`에 적혀 있다.

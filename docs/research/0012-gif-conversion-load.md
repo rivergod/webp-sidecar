@@ -2,8 +2,8 @@
 
 - 상태: 초안
 - 작성일/측정일: 2026-10-29
-- 관련: [ADR-0016](../adr/0016-memory-budget-admission.md)(메모리 예산, accepted), [ADR-0017](../adr/0017-output-volume-limits.md)(작업량 상한, accepted·구현), [ADR-0012](../adr/0012-server-runtime-config.md)(서버 상한과 동시 처리), [design/grpc-api.md](../design/grpc-api.md) §2.5
-- 원자료: [bench/results/2026-10-29-gif/](../../bench/results/2026-10-29-gif/)(`single.tsv`, `gif2webp.tsv`, `load.txt`, `load-before-h2fix.txt`, `environment*.txt`), ADR-0017 구현 뒤 재측정 [bench/results/2026-10-29-gif-adr0017/](../../bench/results/2026-10-29-gif-adr0017/)
+- 관련: [ADR-0016](../adr/0016-memory-budget-admission.md)(메모리 예산, accepted·구현), [ADR-0017](../adr/0017-output-volume-limits.md)(작업량 상한, accepted·구현), [ADR-0012](../adr/0012-server-runtime-config.md)(서버 상한과 동시 처리), [design/grpc-api.md](../design/grpc-api.md) §2.5
+- 원자료: [bench/results/2026-10-29-gif/](../../bench/results/2026-10-29-gif/)(`single.tsv`, `gif2webp.tsv`, `load.txt`, `load-before-h2fix.txt`, `environment*.txt`), ADR-0017 구현 뒤 재측정 [bench/results/2026-10-29-gif-adr0017/](../../bench/results/2026-10-29-gif-adr0017/), ADR-0016 구현 뒤 확인 [bench/results/2026-10-29-gif-adr0016/](../../bench/results/2026-10-29-gif-adr0016/)
 - 도구: `bench/gif.sh`, `bench/src/main/java/.../bench/GifBench.java`(측정), `GifFrames.java`(GIF 합성), `GifInputs.java`(합성 GIF)
 
 ## 요약
@@ -130,6 +130,24 @@ dn0t5cpw (572×315 × 111):
 - **거부는 싸다.** 거부된 6개 스레드가 100 ms마다 다시 시도해 60초에 약 3,550번 거부됐다. 시도 한 번이 약 101 ms(물러섬 100 ms + 거부 약 1 ms)라는 뜻이다. 거부는 첫 메시지(`options`) 직후에 나므로 서버는 프레임을 받지도 합성하지도 않는다. 처리량과 서버 메모리는 거부가 없는 동시 8건과 같다.
 - 동시 8건 이하는 대기가 상한(8)을 넘지 않아 결과가 위 "수정 후"와 같다(오차 안).
 - 지연은 성공한 시도 하나의 시간이다. 거부된 앞선 시도와 물러선 시간은 넣지 않았다. 앱이 보는 전체 시간은 재시도 정책에 따라 더 길다.
+
+### ADR-0016 구현 뒤 (`2026-10-29-gif-adr0016/`)
+
+메모리 예산(기본 요청 몫 640 MiB)이 이 작업의 처리량을 바꾸지 않는지 확인했다. 같은 GIF, 동시 2·16건, 다른 조건은 위와 같다.
+
+| 모드 | 동시 | 처리량(1회 / 반복) | 성공 / 실패 | 즉시 거부 | 지연 p50 | 서버 최고 MiB |
+|---|---|---|---|---|---|---|
+| lossy | 2 | 1.39 / 1.39/s | 실패 0 | 0 | 1.44 s | 23 |
+| lossy | 16 | 1.36 / 1.38/s | 실패 0 | 약 3,560 | 7.2–7.4 s | 25–26 |
+| lossless | 2 | 0.45 / 0.45/s | 실패 0 | 0 | 4.5 s | 56–57 |
+| lossless | 16 | 0.42 / 0.45/s | 실패 0 | 약 3,555 | 22.4–22.5 s | 61–67 |
+
+- ADR-0017 구현 뒤 측정보다 lossy가 약 2.5% 느렸다(p50 1,399 → 1,432 ms). 원인을 가리려고 ADR-0016 전 main 이미지와 ADR-0016 이미지를 같은 호스트 상태에서 차례로 쟀다(`load-ab-main.txt`, `load-ab-branch.txt`).
+  - lossy 동시 2: 둘 다 1.391건/초, p50 1,429 대 1,434 ms.
+  - lossless 동시 2: 0.445 대 0.448건/초.
+  - 차이는 측정 오차 안이다. ADR-0016 전 이미지도 지금은 1.391건/초였으므로, 앞의 2.5%는 시간에 따른 호스트 쪽 변동으로 본다(원인은 미확인).
+- 메모리 예약은 이 작업에서 거의 쓰이지 않는다. 572×315 애니메이션 인코딩 하나의 추정이 캔버스 몫 약 10 MiB + 프레임 몫(lossless 프레임당 약 0.17 MiB)이라, 슬롯 2개와 대기 8개를 합쳐도 예산 640 MiB에 한참 못 미친다.
+- lossless 동시 16에서 성공 수가 34와 36으로 갈린 것은 60초가 끝나는 순간 대기열에 몇 건이 있었는지에 따른 차이다. 반복 측정은 0.445건/초로 ADR-0017 뒤와 같았다.
 
 ## 교착: 원인과 수정
 
