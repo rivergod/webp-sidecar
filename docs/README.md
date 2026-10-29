@@ -71,6 +71,7 @@ docs/
 | [0014](adr/0014-animation-and-metadata-mapping.md) | 애니메이션·메타데이터 매핑 | accepted |
 | [0015](adr/0015-benchmark-method.md) | 벤치마크 방법: 환경, 샘플, SIMD 빌드, Wasm 비교 구현 | accepted |
 | [0016](adr/0016-memory-budget-admission.md) | 메모리 예산 기반 요청 허용 | proposed |
+| [0017](adr/0017-output-volume-limits.md) | 요청당 작업량 상한: 합성 픽셀 수 상한과 서버 쪽 요청 시간 상한 | proposed |
 
 ### 조사
 
