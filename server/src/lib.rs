@@ -6,6 +6,7 @@
 #![warn(missing_docs)]
 #![warn(clippy::undocumented_unsafe_blocks)]
 
+pub mod admission;
 pub mod config;
 pub mod pool;
 pub mod service;

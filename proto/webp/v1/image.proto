@@ -149,4 +149,7 @@ message Limits {
   uint64 max_metadata_bytes = 4;
   // 데이터 조각(bytes 필드) 하나의 최대 크기. 서버는 이 크기 이하로 보내고, 이를 넘는 조각을 받으면 거부한다. 단위: 바이트.
   uint32 max_chunk_bytes = 5;
+  // 요청 하나가 합성하는 캔버스 픽셀 수의 합 상한(ADR-0017). 애니메이션 디코딩은 캔버스 픽셀 수 × 프레임 수
+  // (Decode는 frame_index + 1프레임), 애니메이션 인코딩은 캔버스 픽셀 수 × 받은 프레임 수다. 넘으면 RESOURCE_EXHAUSTED.
+  uint64 max_composited_pixels = 6;
 }

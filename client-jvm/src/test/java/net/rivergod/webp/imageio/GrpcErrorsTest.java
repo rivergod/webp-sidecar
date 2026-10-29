@@ -34,6 +34,34 @@ class GrpcErrorsTest {
     }
 
     @Test
+    void toIIOException_serverBusy_isDistinguishedFromUnavailable() {
+        // given: 서버 대기 상한(ADR-0017) 거부
+        StatusRuntimeException busy = Status.UNAVAILABLE
+                .withDescription("server busy: 8 requests queued (max_queued_requests 8); retry later")
+                .asRuntimeException();
+
+        // when
+        IIOException e = GrpcErrors.toIIOException(busy, "Decode", CONFIG);
+
+        // then
+        assertTrue(e.getMessage().startsWith("WebP server busy"), e.getMessage());
+    }
+
+    @Test
+    void toIIOException_serverRequestTimeLimit_isDistinguishedFromClientDeadline() {
+        // given: 서버 쪽 요청 시간 상한(ADR-0017)
+        StatusRuntimeException limit = Status.DEADLINE_EXCEEDED
+                .withDescription("request exceeded max_request_ms on the server")
+                .asRuntimeException();
+
+        // when
+        IIOException e = GrpcErrors.toIIOException(limit, "Decode", CONFIG);
+
+        // then
+        assertTrue(e.getMessage().startsWith("WebP server request time limit exceeded"), e.getMessage());
+    }
+
+    @Test
     void toIIOException_anyStatus_keepsOriginalAsCause() {
         // given
         StatusRuntimeException error = Status.UNAVAILABLE.asRuntimeException();

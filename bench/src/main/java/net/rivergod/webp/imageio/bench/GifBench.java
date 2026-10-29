@@ -37,6 +37,7 @@ import javax.imageio.stream.MemoryCacheImageOutputStream;
  *       리더로 다시 읽어 캔버스 크기와 프레임 수가 같은지 확인한다.
  *   <li>{@code load <lossy|lossless> <동시 수> <초> <gif>}: 합성은 한 번만 하고, 동시 수만큼의 스레드가 주어진 시간 동안 변환을
  *       반복한다. 변환 수, 오류(gRPC 상태별), 처리량, 지연 백분위를 출력한다. 시간이 끝날 때 진행 중인 변환은 끝까지 기다린다.
+ *       서버 대기 상한에 걸려 {@code UNAVAILABLE}을 받으면 100 ms 물러섰다가 다시 시도한다.
  * </ul>
  */
 public final class GifBench {
@@ -92,7 +93,17 @@ public final class GifBench {
                         encode(a, lossless);
                         latencies.add(System.nanoTime() - s);
                     } catch (Exception e) {
-                        errors.computeIfAbsent(classify(e), k -> new AtomicLong()).incrementAndGet();
+                        String kind = classify(e);
+                        errors.computeIfAbsent(kind, k -> new AtomicLong()).incrementAndGet();
+                        // 서버 대기 상한 거부(ADR-0017)는 잠시 물러섰다가 다시 시도한다(실제 앱의 동작을 흉내 낸다).
+                        if ("UNAVAILABLE".equals(kind)) {
+                            try {
+                                Thread.sleep(100);
+                            } catch (InterruptedException ie) {
+                                Thread.currentThread().interrupt();
+                                return;
+                            }
+                        }
                     }
                 }
             });
