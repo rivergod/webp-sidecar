@@ -9,7 +9,7 @@
 | Phase 2 | JVM SPI 클라이언트(정지 이미지) + 통합 테스트 | 완료 (2026-10-23) |
 | Phase 3 | 애니메이션 + ICC/EXIF/XMP | 완료 (2026-10-23) |
 | Phase 4 | JMH 벤치마크 + 결과 보고서 | 완료 (2026-10-23, JDeli는 요청 시) |
-| Phase 5 | 보안 강화(seccomp, 퍼징) + proto 회고 | 대기 |
+| Phase 5 | 보안 강화(seccomp, 퍼징) + 성능 보강 + proto 회고 | 진행 중 |
 
 ## Phase 0: 기반 정리
 
@@ -93,12 +93,28 @@
 - [ ] 원격 저장소 위치·공개 여부와 CI
 - [ ] Maven Central 배포 여부. 배포하면 `rivergod.net`에 DNS TXT 레코드로 namespace를 확인받아야 한다([ADR-0010](adr/0010-maven-coordinates.md)).
 
-## Phase 5: 보안 강화 + proto 회고
+## Phase 5: 보안 강화 + 성능 보강 + proto 회고
 
-완료 기준:
+결정(결정자, 2026-10-29): Phase 4 판정(18개 중 12개 충족)에 대해 **조건부 계속**. 보안 검증을 먼저 하고, 기간을 정한 성능 보강을 한 번 거친 뒤 ADR-0011 기준(바꾸지 않는다)으로 다시 판정한다. 그 결과를 proto 회고 ADR에 담는다. 순서는 아래 단계 순이다.
+
+### 5-1. 보안 검증
 
 - [ ] 서버 seccomp 프로파일을 만들고, 적용 상태에서 전체 통합 테스트가 통과한다.
+- [ ] 컨테이너 제한(메모리/CPU, read-only, 네트워크 차단, non-root)이 실제로 적용됐는지 검증한다.
 - [ ] 서버 입력 경로(Decode, GetFeatures, DecodeAnimation) 퍼저를 만들고 실행 결과(시간, 발견 사항)를 기록한다.
 - [ ] 출력량 폭탄 대응을 정한다: 4096² 캔버스 × 1,000프레임 파일은 기본 상한을 모두 통과하지만 합성 출력이 약 64 GiB다(research/0005). 총 출력 픽셀 상한 같은 방안을 ADR로 제안한다.
-- [ ] 컨테이너 제한(메모리/CPU, read-only, 네트워크 차단, non-root)이 실제로 적용됐는지 검증한다.
-- [ ] proto 회고 ADR(계속/중단 판단과 근거)을 `proposed`로 작성한다. Phase 4 미달 조건(대 JNI, 사진 lossy·alpha)과 개선 후보([research/0009](research/0009-benchmark-results.md) "Phase 5 회고에 넘길 것": 서버 할당자, GetFeatures 왕복 제거, 클라이언트 경로, 픽셀 포맷 ABGR8/RGB8, SIMD 런타임 분기)를 입력으로 한다.
+
+### 5-2. 성능 보강 (측정 1회분)
+
+입력: [research/0009](research/0009-benchmark-results.md) "Phase 5 회고에 넘길 것". 범위는 아래 넷이다. SIMD 런타임 분기 빌드는 하지 않는다(libwebp 1.6.0 디코더에 해당 코드가 거의 없음을 확인). 공유 메모리 전송은 아래로 부족할 때 조사만 한다.
+
+- [ ] GetFeatures 왕복 생략: `read()`만 부를 때는 Decode 응답 헤더로 크기·상한을 확인한다(클라이언트만 변경).
+- [ ] 클라이언트 경로 프로파일링: 변환 외 비용(M lossy 1.5 ms)의 출처를 찾아 줄인다.
+- [ ] 픽셀 포맷 `BGRA8`(리틀엔디언 int ARGB 바이트 순서) 추가: 클라이언트가 픽셀별 변환 대신 통째로 복사한다. proto는 enum 추가(하위 호환), ADR로 제안한다.
+- [ ] 서버 할당자: (a) 출력 버퍼 재사용을 먼저 재고, 부족하면 (b) glibc 기반 이미지를 ADR-0012를 대체하는 ADR로 제안한다. (a)는 만료 정책(재사용 크기 상한, 개수·총량 상한, 유휴 만료, 메모리 압박 시 우선 해제, 실패 시 이전 픽셀 노출 방지)을 함께 정한다.
+- [ ] `bench/run.sh`로 ADR-0011을 다시 판정하고 research 문서로 기록한다.
+
+### 5-3. proto 회고
+
+- [ ] proto 회고 ADR(계속/중단 판단과 근거)을 `proposed`로 작성한다. 입력: Phase 4 판정, 5-1 보안 검증 결과, 5-2 재판정, proto 변경 안건(픽셀 포맷, 총 출력 픽셀 상한, GetFeatures/Decode 중복). 계속/중단 결정은 결정자가 한다.
+- [ ] ImageIO 설정 주입(공개 설정 타입, SPI 수동 등록, ReadParam/WriteParam) ADR을 `proposed`로 작성한다.
