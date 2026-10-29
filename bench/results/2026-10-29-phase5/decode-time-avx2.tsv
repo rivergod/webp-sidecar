@@ -1,0 +1,16 @@
+file	median_ms	min_ms	p90_ms	iterations
+XS_64x64_lossy_q75.webp	0.037	0.033	0.040	50
+XS_64x64_lossless.webp	0.101	0.085	0.109	50
+XS_64x64_lossy_alpha_q75.webp	0.069	0.060	0.081	50
+S_256x256_lossy_q75.webp	0.351	0.330	0.369	50
+S_256x256_lossless.webp	0.917	0.909	0.935	50
+S_256x256_lossy_alpha_q75.webp	0.702	0.690	0.754	50
+M_1024x768_lossy_q75.webp	2.713	2.698	2.728	50
+M_1024x768_lossless.webp	10.370	10.317	10.442	50
+M_1024x768_lossy_alpha_q75.webp	5.653	5.554	6.342	50
+L_1920x1080_lossy_q75.webp	6.256	6.231	6.347	50
+L_1920x1080_lossless.webp	27.743	27.462	30.639	50
+L_1920x1080_lossy_alpha_q75.webp	13.301	13.052	13.431	50
+XL_4000x3000_lossy_q75.webp	35.921	35.706	36.182	50
+XL_4000x3000_lossless.webp	168.174	167.374	172.720	50
+XL_4000x3000_lossy_alpha_q75.webp	69.997	69.508	71.161	50

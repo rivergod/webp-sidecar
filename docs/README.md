@@ -86,6 +86,7 @@ docs/
 - [research/0008-java-uds-poc.md](research/0008-java-uds-poc.md) — Java UDS PoC, 변환 비용, JPMS
 - [research/0009-benchmark-results.md](research/0009-benchmark-results.md) — Phase 4 벤치마크 결과와 ADR-0011 가설 판정
 - [research/0010-server-fuzzing.md](research/0010-server-fuzzing.md) — 서버 입력 경로 퍼징(libFuzzer + ASan) 결과
+- [research/0011-phase5-performance.md](research/0011-phase5-performance.md) — Phase 5-2 성능 보강과 ADR-0011 재판정
 
 ### 작업 규칙
 
