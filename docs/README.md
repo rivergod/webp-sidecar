@@ -84,6 +84,7 @@ docs/
 - [research/0007-server-memory-budget.md](research/0007-server-memory-budget.md) — 서버 메모리 예산 측정(정지·애니메이션)
 - [research/0008-java-uds-poc.md](research/0008-java-uds-poc.md) — Java UDS PoC, 변환 비용, JPMS
 - [research/0009-benchmark-results.md](research/0009-benchmark-results.md) — Phase 4 벤치마크 결과와 ADR-0011 가설 판정
+- [research/0010-server-fuzzing.md](research/0010-server-fuzzing.md) — 서버 입력 경로 퍼징(libFuzzer + ASan) 결과
 
 ### 작업 규칙
 
