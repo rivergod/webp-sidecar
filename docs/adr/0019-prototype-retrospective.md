@@ -1,8 +1,8 @@
 # 0019. 프로토타입 회고: 사이드카 구조를 계속한다(proto `webp.v1` 유지)
 
-- 상태: proposed
+- 상태: accepted
 - 날짜: 2026-10-29
-- 결정자: -
+- 결정자: Ilkang Na
 - 관련 문서: [ADR-0001](0001-isolate-libwebp-in-grpc-sidecar.md)(사이드카 격리), [ADR-0011](0011-hypothesis-criteria.md)(판정 기준), [ADR-0017](0017-output-volume-limits.md)(작업량 상한, proposed), [ADR-0018](0018-decode-output-buffer-pool.md)(버퍼 풀, proposed), [research/0009](../research/0009-benchmark-results.md)(Phase 4), [research/0010](../research/0010-server-fuzzing.md)(퍼징), [research/0011](../research/0011-phase5-performance.md)(Phase 5-2 재판정), [docs/roadmap.md](../roadmap.md) Phase 5
 
 ## 맥락
