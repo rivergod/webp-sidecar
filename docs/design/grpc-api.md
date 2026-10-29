@@ -101,6 +101,8 @@ sequenceDiagram
 | `--max-metadata-bytes` | `WEBP_SERVER_MAX_METADATA_BYTES` | `2097152` (2 MiB) | `Limits.max_metadata_bytes` |
 | `--max-chunk-bytes` | `WEBP_SERVER_MAX_CHUNK_BYTES` | `1048576` (1 MiB) | `Limits.max_chunk_bytes` |
 | `--max-concurrency` | `WEBP_SERVER_MAX_CONCURRENCY` | `2` | 동시에 libwebp 작업을 하는 요청 수 |
+| `--buffer-pool-bytes` | `WEBP_SERVER_BUFFER_POOL_BYTES` | `134217728` (128 MiB) | 정지 이미지 출력 버퍼 풀 총량 상한, 0이면 끔([ADR-0018](../adr/0018-decode-output-buffer-pool.md), proposed) |
+| `--buffer-pool-idle-ms` | `WEBP_SERVER_BUFFER_POOL_IDLE_MS` | `30000` | 풀 버퍼 유휴 만료(ADR-0018) |
 
 로그 수준은 `RUST_LOG` 환경변수로 정한다(Rust `tracing` 관례).
 

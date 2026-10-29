@@ -5,6 +5,7 @@
 //! - libwebp 작업은 blocking 스레드 풀에서 하고, 동시에 작업하는 요청 수를 세마포어로 제한한다(ADR-0012).
 
 use crate::config::Limits;
+use crate::pool::{BufferPool, PoolConfig};
 use crate::proto::{self as pb, web_p_service_server::WebPService};
 use crate::webp::{self, WebpError};
 use bytes::Bytes;
@@ -25,14 +26,22 @@ type ResponseStream<T> = Pin<Box<dyn Stream<Item = Result<T, Status>> + Send + '
 pub struct WebpService {
     limits: Limits,
     permits: Arc<Semaphore>,
+    pool: BufferPool,
 }
 
 impl WebpService {
-    /// 상한과 동시 처리 수(1 이상)로 서비스를 만든다.
+    /// 상한과 동시 처리 수(1 이상)로 서비스를 만든다. 출력 버퍼 풀은 기본 설정(ADR-0018)이다.
     pub fn new(limits: Limits, max_concurrency: usize) -> Self {
+        Self::with_pool(limits, max_concurrency, BufferPool::new(PoolConfig::default()))
+    }
+
+    /// [`WebpService::new`]와 같고, 출력 버퍼 풀을 지정한다. 풀의 유휴 정리는 호출자가 주기적으로 한다
+    /// ([`BufferPool::evict_expired`]).
+    pub fn with_pool(limits: Limits, max_concurrency: usize, pool: BufferPool) -> Self {
         Self {
             limits,
             permits: Arc::new(Semaphore::new(max_concurrency.max(1))),
+            pool,
         }
     }
 }
@@ -564,17 +573,32 @@ impl WebPService for WebpService {
         }
 
         // 디코딩하고 헤더 → 픽셀 조각 순서로 보낸다. 픽셀 버퍼가 남아 있는 동안(전송이 끝날 때까지) 슬롯을 유지한다.
+        // 출력 버퍼는 풀에서 꺼내고, 전송이 끝나 마지막 조각이 해제되면 풀로 돌아간다(ADR-0018).
         let (tx, rx) = mpsc::channel(RESPONSE_CHANNEL_DEPTH);
+        let pool = self.pool.clone();
         tokio::spawn(async move {
             let _permit = permit;
-            match run_blocking(move || webp::decode_still_rgba(&data, &features).map_err(to_status)).await {
+            let decode_pool = pool.clone();
+            let decoded = run_blocking(move || {
+                let len = features.pixel_count() as usize * 4;
+                let mut buf = decode_pool.take(len);
+                match webp::decode_still_rgba_into(&data, &features, &mut buf) {
+                    Ok(()) => Ok(buf),
+                    Err(e) => {
+                        decode_pool.give(buf);
+                        Err(to_status(e))
+                    }
+                }
+            })
+            .await;
+            match decoded {
                 Ok(pixels) => {
                     let header = frame_header(0, features.width, features.height, pixels.len(), features.has_alpha, 0);
                     let header = pb::DecodeResponse {
                         payload: Some(pb::decode_response::Payload::Header(header)),
                     };
                     if tx.send(Ok(header)).await.is_ok() {
-                        send_chunks(&tx, Bytes::from(pixels), limits.max_chunk_bytes as usize, |b| {
+                        send_chunks(&tx, pool.wrap(pixels), limits.max_chunk_bytes as usize, |b| {
                             pb::DecodeResponse {
                                 payload: Some(pb::decode_response::Payload::Pixels(b)),
                             }
