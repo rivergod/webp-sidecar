@@ -1,0 +1,11 @@
+input: dn0t5cpw.gif (클라이언트 데드라인 기본 30000 ms, 단계당 60초)
+mode=lossy concurrency=1 elapsed_s=61.2 ok=40 errors={} throughput_per_s=0.653 p50_ms=1532 p90_ms=1561 p99_ms=1569 max_ms=1569 server_peak_mib=15 oom_killed=false
+mode=lossy concurrency=2 elapsed_s=61.4 ok=76 errors={} throughput_per_s=1.237 p50_ms=1601 p90_ms=1669 p99_ms=1708 max_ms=1708 server_peak_mib=27 oom_killed=false
+mode=lossy concurrency=4 elapsed_s=60.0 ok=0 errors={DEADLINE_EXCEEDED=8} throughput_per_s=0.000 p50_ms=0 p90_ms=0 p99_ms=0 max_ms=0 server_peak_mib=14 oom_killed=false
+mode=lossy concurrency=8 elapsed_s=60.0 ok=0 errors={DEADLINE_EXCEEDED=16} throughput_per_s=0.000 p50_ms=0 p90_ms=0 p99_ms=0 max_ms=0 server_peak_mib=15 oom_killed=false
+mode=lossy concurrency=16 elapsed_s=60.0 ok=0 errors={DEADLINE_EXCEEDED=32} throughput_per_s=0.000 p50_ms=0 p90_ms=0 p99_ms=0 max_ms=0 server_peak_mib=15 oom_killed=false
+mode=lossless concurrency=1 elapsed_s=60.6 ok=18 errors={} throughput_per_s=0.297 p50_ms=3319 p90_ms=3501 p99_ms=3862 max_ms=3862 server_peak_mib=27 oom_killed=false
+mode=lossless concurrency=2 elapsed_s=62.8 ok=36 errors={} throughput_per_s=0.574 p50_ms=3478 p90_ms=3549 p99_ms=3603 max_ms=3603 server_peak_mib=46 oom_killed=false
+mode=lossless concurrency=4 elapsed_s=60.0 ok=0 errors={DEADLINE_EXCEEDED=8} throughput_per_s=0.000 p50_ms=0 p90_ms=0 p99_ms=0 max_ms=0 server_peak_mib=27 oom_killed=false
+mode=lossless concurrency=8 elapsed_s=60.0 ok=0 errors={DEADLINE_EXCEEDED=16} throughput_per_s=0.000 p50_ms=0 p90_ms=0 p99_ms=0 max_ms=0 server_peak_mib=27 oom_killed=false
+mode=lossless concurrency=16 elapsed_s=60.0 ok=0 errors={DEADLINE_EXCEEDED=32} throughput_per_s=0.000 p50_ms=0 p90_ms=0 p99_ms=0 max_ms=0 server_peak_mib=27 oom_killed=false

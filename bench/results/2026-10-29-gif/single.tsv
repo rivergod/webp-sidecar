@@ -1,0 +1,17 @@
+file	mode	canvas	frames	gif_bytes	composite_ms	encode_ms	webp_bytes	webp_vs_gif	server
+dn0t5cpw.gif	lossy	572x315	111	9754706	300	1796	2888372	0.30	server_peak_mib=15 oom_killed=false
+image_50k6r1c7.gif	lossy	480x270	93	4547414	163	1155	1592806	0.35	server_peak_mib=12 oom_killed=false
+video_572x315_111.gif	lossy	572x315	111	8592044	276	1613	1488764	0.17	server_peak_mib=14 oom_killed=false
+video_480x270_93.gif	lossy	480x270	93	5514329	254	1069	916202	0.17	server_peak_mib=11 oom_killed=false
+video_480x270_10.gif	lossy	480x270	10	506327	70	340	72382	0.14	server_peak_mib=10 oom_killed=false
+video_480x270_100.gif	lossy	480x270	100	5927703	193	1116	973148	0.16	server_peak_mib=11 oom_killed=false
+video_480x270_300.gif	lossy	480x270	300	18431993	440	2866	3094844	0.17	server_peak_mib=14 oom_killed=false
+video_480x270_1000.gif	lossy	480x270	1000	61325114	1180	8969	9656648	0.16	server_peak_mib=34 oom_killed=false
+dn0t5cpw.gif	lossless	572x315	111	9754706	271	3529	7560962	0.78	server_peak_mib=27 oom_killed=false
+image_50k6r1c7.gif	lossless	480x270	93	4547414	166	2526	5296608	1.16	server_peak_mib=21 oom_killed=false
+video_572x315_111.gif	lossless	572x315	111	8592044	253	4438	7060480	0.82	server_peak_mib=31 oom_killed=false
+video_480x270_93.gif	lossless	480x270	93	5514329	217	3662	4522568	0.82	server_peak_mib=48 oom_killed=false
+video_480x270_10.gif	lossless	480x270	10	506327	69	573	428112	0.85	server_peak_mib=43 oom_killed=false
+video_480x270_100.gif	lossless	480x270	100	5927703	199	4009	4870400	0.82	server_peak_mib=48 oom_killed=false
+video_480x270_300.gif	lossless	480x270	300	18431993	443	11816	15010712	0.81	server_peak_mib=59 oom_killed=false
+video_480x270_1000.gif	lossless	480x270	1000	61325114	1188	39999	50121720	0.82	server_peak_mib=153 oom_killed=false

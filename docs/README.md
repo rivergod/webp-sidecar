@@ -71,7 +71,7 @@ docs/
 | [0014](adr/0014-animation-and-metadata-mapping.md) | 애니메이션·메타데이터 매핑 | accepted |
 | [0015](adr/0015-benchmark-method.md) | 벤치마크 방법: 환경, 샘플, SIMD 빌드, Wasm 비교 구현 | accepted |
 | [0016](adr/0016-memory-budget-admission.md) | 메모리 예산 기반 요청 허용 | proposed |
-| [0017](adr/0017-output-volume-limits.md) | 요청당 작업량 상한: 합성 픽셀 수 상한과 서버 쪽 요청 시간 상한 | proposed |
+| [0017](adr/0017-output-volume-limits.md) | 요청당 작업량 상한: 합성 픽셀 수 상한, 서버 쪽 요청 시간 상한, 대기 상한 | proposed |
 | [0018](adr/0018-decode-output-buffer-pool.md) | 정지 이미지 디코딩 출력 버퍼 재사용(버퍼 풀)과 만료 정책 | accepted |
 | [0019](adr/0019-prototype-retrospective.md) | 프로토타입 회고: 사이드카 구조를 계속한다(proto `webp.v1` 유지) | accepted |
 | [0020](adr/0020-imageio-config-injection.md) | ImageIO 플러그인 설정을 코드로 넘기는 방법 | proposed |
@@ -89,6 +89,7 @@ docs/
 - [research/0009-benchmark-results.md](research/0009-benchmark-results.md) — Phase 4 벤치마크 결과와 ADR-0011 가설 판정
 - [research/0010-server-fuzzing.md](research/0010-server-fuzzing.md) — 서버 입력 경로 퍼징(libFuzzer + ASan) 결과
 - [research/0011-phase5-performance.md](research/0011-phase5-performance.md) — Phase 5-2 성능 보강과 ADR-0011 재판정
+- [research/0012-gif-conversion-load.md](research/0012-gif-conversion-load.md) — GIF → WebP 변환 단건·동시 부하, HTTP/2 흐름 제어 교착 발견
 
 ### 작업 규칙
 

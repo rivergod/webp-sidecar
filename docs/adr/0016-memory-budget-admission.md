@@ -3,7 +3,8 @@
 - 상태: proposed
 - 날짜: 2026-10-23
 - 결정자: -
-- 관련 문서: [ADR-0012](0012-server-runtime-config.md), [docs/research/0007-server-memory-budget.md](../research/0007-server-memory-budget.md)
+- 관련 문서: [ADR-0012](0012-server-runtime-config.md), [ADR-0018](0018-decode-output-buffer-pool.md)(버퍼 풀), [docs/research/0007-server-memory-budget.md](../research/0007-server-memory-budget.md), [docs/research/0012-gif-conversion-load.md](../research/0012-gif-conversion-load.md)
+- 개정: 2026-10-29 — 애니메이션 인코딩의 프레임 수 몫(research/0012)과 버퍼 풀(ADR-0018, accepted)을 반영했다
 
 ## 맥락
 
@@ -37,10 +38,20 @@ ADR-0012는 기본값 조합(메모리 1 GiB, 동시 처리 2, `max_pixels` 8192
   - 정지 이미지 디코딩: 입력 크기 + 6 B × 픽셀 수
   - 애니메이션 디코딩: 입력 크기 + 10 B × 캔버스 픽셀 수(측정 8.6 B/px, 캔버스 버퍼 2개 + 전송 버퍼)
   - 정지 이미지 인코딩: 40 B × 픽셀 수(측정 31–36 B/px, 입력 버퍼 포함)
-  - 애니메이션 인코딩: 60 B × 캔버스 픽셀 수(측정 50–52 B/px, 3프레임 lossless. 프레임이 많을 때는 미측정)
+  - 애니메이션 인코딩: 60 B × 캔버스 픽셀 수(측정 50–52 B/px, 3프레임 lossless) **+ 프레임마다** lossless 1 B, lossy 0.25 B × 캔버스 픽셀 수
+    - 프레임 몫 실측(480×270, 100 → 1,000프레임): lossless 0.9 B, lossy 0.2 B / 픽셀·프레임(research/0012).
+    - 인코더가 프레임별 압축 결과를 끝까지 모아 두기 때문으로 본다(추정).
+    - 프레임 수는 미리 알 수 없다. 그래서 시작할 때 캔버스 몫을 예약하고, 프레임을 받을 때마다 프레임 몫을 더 예약한다.
+    - 더 예약할 수 없으면 다음 순서로 한다. 하나라도 성공하면 계속 받는다.
+      1. 버퍼 풀을 비운다(아래).
+      2. 다른 요청이 끝날 때까지 남은 요청 시간 안에서 기다린다(ADR-0017).
+      3. 그래도 안 되면 `RESOURCE_EXHAUSTED`를 낸다.
   - GetFeatures: 입력 크기
 - 혼자서도 `max_memory_bytes`를 넘는 요청은 기다리지 않고 바로 `RESOURCE_EXHAUSTED`로 거부한다. 메시지에 추정치와 예산을 적는다.
 - `max_concurrency`는 CPU 사용 상한으로 그대로 둔다(두 제한을 모두 만족해야 처리한다).
+- 출력 버퍼 풀(ADR-0018, 기본 128 MiB)은 상주 메모리다.
+  - 예산에서 풀 총량 상한을 먼저 빼고 시작한다. 기본값 기준 768 − 128 = 640 MiB를 요청이 쓴다.
+  - 예약할 수 없을 때는 풀을 먼저 비우고 다시 시도한다.
 - 기본값으로는 인코딩 최대 크기가 약 4096²(768 MiB ÷ 40 B ≈ 2,000만 픽셀)로 사실상 제한된다. 더 큰 인코딩이 필요하면 컨테이너 메모리와 `max_memory_bytes`를 함께 올린다.
 
 ### 결과
@@ -54,7 +65,8 @@ ADR-0012는 기본값 조합(메모리 1 GiB, 동시 처리 2, `max_pixels` 8192
 ### 확인 방법
 
 - `server/scripts/measure-memory.sh 1g 2 8192`와 `1g 2 4096`에서 OOM이 0이고, 예산을 넘는 요청은 `RESOURCE_EXHAUSTED`로 거부된다.
-- 애니메이션 계수는 Phase 3에서 측정해 위 추정식에 반영했다(research/0007). 프레임 수가 많은 경우는 추가로 잰다.
+- 애니메이션 캔버스 계수는 Phase 3에서 쟀다(research/0007). 프레임 몫은 GIF 변환 측정에서 쟀다(research/0012).
+- 영상 같은 GIF 변환(약 500×300, 100프레임 안팎)은 동시 16건에서도 서버 최고 75 MiB였다. 이 작업에서는 예산이 거의 쓰이지 않아야 하고, 처리량이 바뀌지 않아야 한다.
 
 ## 선택지별 장단점
 
