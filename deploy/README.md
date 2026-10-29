@@ -32,6 +32,7 @@ docker run -d --name webp-server \
 - 기본 사용자는 `65532:65532`(non-root), 소켓 모드는 `0660`이다. 클라이언트는 같은 볼륨을 마운트하고 그룹 65532를 쓴다.
 - 호스트 디렉터리를 바인드 마운트해 호스트 프로세스가 붙게 하려면 `--user "$(id -u):$(id -g)"`로 소유자를 맞춘다.
 - 설정은 환경변수(`-e WEBP_SERVER_...`)나 명령줄 인자로 준다. 키: [docs/design/grpc-api.md §3.1](../docs/design/grpc-api.md).
+- **메모리 제한을 바꾸면 메모리 예산도 함께 바꾼다**: 서버는 `WEBP_SERVER_MAX_MEMORY_BYTES`(기본 768 MiB, `--memory 1g`의 75%) 안에서만 요청을 받는다([ADR-0016](../docs/adr/0016-memory-budget-admission.md)). 컨테이너 제한만 올리면 큰 인코딩은 계속 거부된다. 예: `--memory 4g`이면 `-e WEBP_SERVER_MAX_MEMORY_BYTES=3221225472`(3 GiB).
 - 개발용 TCP: `--network` 제한을 풀고 `-e WEBP_SERVER_TCP_ADDR=0.0.0.0:50051 -p 127.0.0.1:50051:50051`. 컨테이너 안에서는 `0.0.0.0`에 바인드해야 포트 게시가 동작하고, 호스트 쪽은 `127.0.0.1`로만 연다.
 - **UDS 경로 길이**: AF_UNIX 소켓 경로는 약 107바이트를 넘을 수 없다. 깊은 임시 디렉터리에 소켓을 두면 연결이 실패한다(기본 `/run/webp-imageio/webp.sock`은 문제없다).
 

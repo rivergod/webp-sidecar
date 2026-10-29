@@ -1,0 +1,5 @@
+input: video_572x315_111.gif (클라이언트 데드라인 기본 30000 ms, 단계당 60초)
+mode=lossy concurrency=2 elapsed_s=60.5 ok=84 errors={} throughput_per_s=1.388 p50_ms=1436 p90_ms=1476 p99_ms=1500 max_ms=1500 server_peak_mib=23 oom_killed=false
+mode=lossy concurrency=16 elapsed_s=66.4 ok=90 errors={UNAVAILABLE=3558} throughput_per_s=1.355 p50_ms=7359 p90_ms=7490 p99_ms=7535 max_ms=7535 server_peak_mib=25 oom_killed=false
+mode=lossless concurrency=2 elapsed_s=62.4 ok=28 errors={} throughput_per_s=0.449 p50_ms=4454 p90_ms=4505 p99_ms=4527 max_ms=4527 server_peak_mib=57 oom_killed=false
+mode=lossless concurrency=16 elapsed_s=80.9 ok=34 errors={UNAVAILABLE=3559} throughput_per_s=0.420 p50_ms=22439 p90_ms=22976 p99_ms=23115 max_ms=23115 server_peak_mib=67 oom_killed=false
