@@ -4,6 +4,9 @@
 //! - 상한과 검사 시점: §3, 오류 매핑: §4
 //! - libwebp 작업은 blocking 스레드 풀에서 하고, 동시에 작업하는 요청 수를 세마포어로 제한한다(ADR-0012).
 
+use crate::admission::{
+    Admission, DeadlineStream, RequestPolicy, Sent, Slot, blocking_send_until, deadline_exceeded, send_until,
+};
 use crate::config::Limits;
 use crate::pool::{BufferPool, PoolConfig};
 use crate::proto::{self as pb, web_p_service_server::WebPService};
@@ -11,7 +14,7 @@ use crate::webp::{self, WebpError};
 use bytes::Bytes;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
+use tokio::sync::mpsc;
 use tokio_stream::Stream;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
@@ -25,22 +28,27 @@ type ResponseStream<T> = Pin<Box<dyn Stream<Item = Result<T, Status>> + Send + '
 #[derive(Debug, Clone)]
 pub struct WebpService {
     limits: Limits,
-    permits: Arc<Semaphore>,
+    admission: Arc<Admission>,
     pool: BufferPool,
 }
 
 impl WebpService {
-    /// 상한과 동시 처리 수(1 이상)로 서비스를 만든다. 출력 버퍼 풀은 기본 설정(ADR-0018)이다.
+    /// 상한과 동시 처리 수(1 이상)로 서비스를 만든다. 출력 버퍼 풀(ADR-0018)과 대기·시간 상한(ADR-0017)은 기본값이다.
     pub fn new(limits: Limits, max_concurrency: usize) -> Self {
-        Self::with_pool(limits, max_concurrency, BufferPool::new(PoolConfig::default()))
+        Self::with_config(
+            limits,
+            max_concurrency,
+            BufferPool::new(PoolConfig::default()),
+            RequestPolicy::default(),
+        )
     }
 
-    /// [`WebpService::new`]와 같고, 출력 버퍼 풀을 지정한다. 풀의 유휴 정리는 호출자가 주기적으로 한다
-    /// ([`BufferPool::evict_expired`]).
-    pub fn with_pool(limits: Limits, max_concurrency: usize, pool: BufferPool) -> Self {
+    /// [`WebpService::new`]와 같고, 출력 버퍼 풀과 대기·시간 상한을 지정한다. 풀의 유휴 정리는 호출자가 주기적으로
+    /// 한다([`BufferPool::evict_expired`]).
+    pub fn with_config(limits: Limits, max_concurrency: usize, pool: BufferPool, policy: RequestPolicy) -> Self {
         Self {
             limits,
-            permits: Arc::new(Semaphore::new(max_concurrency.max(1))),
+            admission: Arc::new(Admission::new(max_concurrency, policy)),
             pool,
         }
     }
@@ -117,14 +125,15 @@ impl_input_message!(
 /// `expected_len`은 options를 검증하고 뒤따를 데이터의 바이트 수를 돌려준다. 검증이 끝나면 **입력 버퍼를 할당하기
 /// 전에** 동시 처리 슬롯을 잡는다. 그래서 큰 입력(인코딩 픽셀은 최대 수백 MiB)을 받는 요청 수도 슬롯 수로
 /// 제한된다(ADR-0012 메모리 예산). 슬롯은 돌려받은 쪽이 응답 전송이 끝날 때까지 들고 있는다.
-/// 슬롯을 기다리는 동안 클라이언트가 취소하면 tonic이 이 future를 버리므로 대기도 함께 끝난다.
+/// 슬롯을 기다리는 동안 클라이언트가 취소하면 tonic이 이 future를 버리므로 대기도 함께 끝난다. 대기 상한을 넘으면
+/// 기다리지 않고 거부하고, 슬롯을 잡은 뒤의 입력 수신은 요청 시간 상한까지만 기다린다(ADR-0017).
 /// 조각 크기·순서·합계 검사는 docs/design/grpc-api.md §2.2를 따른다.
 async fn collect_input<M: InputMessage>(
     stream: &mut Streaming<M>,
     max_chunk_bytes: u32,
-    permits: &Arc<Semaphore>,
+    admission: &Admission,
     expected_len: impl FnOnce(&M::Options) -> Result<u64, Status>,
-) -> Result<(M::Options, Vec<u8>, OwnedSemaphorePermit), Status> {
+) -> Result<(M::Options, Vec<u8>, Slot), Status> {
     // 첫 메시지는 options여야 한다.
     let first = stream
         .message()
@@ -136,11 +145,7 @@ async fn collect_input<M: InputMessage>(
 
     // 선언된 크기를 검증하고, 슬롯을 얻은 뒤 그만큼만 할당한다.
     let expected = expected_len(&options)?;
-    let permit = permits
-        .clone()
-        .acquire_owned()
-        .await
-        .map_err(|_| Status::unavailable("server is shutting down"))?;
+    let slot = admission.acquire().await?;
     let expected = usize::try_from(expected)
         .map_err(|_| Status::resource_exhausted(format!("{expected} bytes do not fit in memory")))?;
     let mut buf = Vec::new();
@@ -148,7 +153,7 @@ async fn collect_input<M: InputMessage>(
         .map_err(|_| Status::resource_exhausted(format!("cannot allocate {expected} bytes for the input")))?;
 
     // 조각을 모은다. 크기와 순서가 어긋나면 클라이언트 버그이므로 INVALID_ARGUMENT.
-    while let Some(message) = stream.message().await? {
+    while let Some(message) = receive_until(stream, slot.deadline()).await? {
         match message.into_part() {
             Some(Part::Data(chunk)) => {
                 if chunk.is_empty() || chunk.len() > max_chunk_bytes as usize {
@@ -178,7 +183,27 @@ async fn collect_input<M: InputMessage>(
             buf.len()
         )));
     }
-    Ok((options, buf, permit))
+    Ok((options, buf, slot))
+}
+
+/// 다음 요청 메시지를 마감까지만 기다린다(느린 업로드가 슬롯을 쥐지 못하게, ADR-0017).
+async fn receive_until<M>(stream: &mut Streaming<M>, deadline: tokio::time::Instant) -> Result<Option<M>, Status> {
+    tokio::time::timeout_at(deadline, stream.message())
+        .await
+        .map_err(|_| deadline_exceeded())?
+}
+
+/// 합성 픽셀 수(캔버스 × 프레임 수)가 상한을 넘으면 거부한다(ADR-0017 출력량 폭탄).
+fn check_composited(canvas_pixels: u64, frames: u64, limits: &Limits) -> Result<(), Status> {
+    let total = canvas_pixels.saturating_mul(frames);
+    if total > limits.max_composited_pixels {
+        return Err(Status::resource_exhausted(format!(
+            "{frames} frames of a {canvas_pixels}-pixel canvas = {total} composited pixels exceeds \
+             max_composited_pixels {}",
+            limits.max_composited_pixels
+        )));
+    }
+    Ok(())
 }
 
 /// 압축 입력 선언 크기를 검사한다.
@@ -232,34 +257,55 @@ async fn run_blocking<R: Send + 'static>(f: impl FnOnce() -> Result<R, Status> +
         .map_err(|e| Status::internal(format!("worker task failed: {e}")))?
 }
 
-/// `data`를 `chunk` 바이트 이하 조각으로 나눠 보낸다. 복사 없이 `Bytes`를 자른다. 수신 측이 떠나면 false.
+/// `data`를 `chunk` 바이트 이하 조각으로 나눠 마감까지 보낸다. 복사 없이 `Bytes`를 자른다.
 async fn send_chunks<T>(
     tx: &mpsc::Sender<Result<T, Status>>,
     data: Bytes,
     chunk: usize,
+    deadline: tokio::time::Instant,
     wrap: impl Fn(Bytes) -> T,
-) -> bool {
+) -> Sent {
     let mut start = 0;
     while start < data.len() {
         let end = (start + chunk).min(data.len());
-        if tx.send(Ok(wrap(data.slice(start..end)))).await.is_err() {
-            return false;
+        let sent = send_until(tx, Ok(wrap(data.slice(start..end))), deadline).await;
+        if sent != Sent::Ok {
+            return sent;
         }
         start = end;
     }
-    true
+    Sent::Ok
 }
 
-/// blocking 스레드에서 `data`를 `chunk` 바이트 이하 조각으로 복사해 보낸다. 채널이 차면 기다린다(흐름 제어).
-/// 수신 측이 떠나면 false.
+/// blocking 스레드에서 `data`를 `chunk` 바이트 이하 조각으로 복사해 보낸다. 채널이 차면 마감까지 기다린다(흐름 제어).
 fn blocking_send_chunks<T>(
     tx: &mpsc::Sender<Result<T, Status>>,
     data: &[u8],
     chunk: usize,
+    deadline: tokio::time::Instant,
     wrap: impl Fn(Bytes) -> T,
-) -> bool {
-    data.chunks(chunk)
-        .all(|c| tx.blocking_send(Ok(wrap(Bytes::copy_from_slice(c)))).is_ok())
+) -> Sent {
+    for c in data.chunks(chunk) {
+        let sent = blocking_send_until(tx, Ok(wrap(Bytes::copy_from_slice(c))), deadline);
+        if sent != Sent::Ok {
+            return sent;
+        }
+    }
+    Sent::Ok
+}
+
+/// blocking 스레드에서 오류를 응답 스트림에 알린다. 클라이언트가 읽지 않으면 마감까지만 기다린다.
+fn blocking_report<T>(tx: &mpsc::Sender<Result<T, Status>>, status: Status, deadline: tokio::time::Instant) {
+    let _ = blocking_send_until(tx, Err(status), deadline);
+}
+
+/// 전송 결과를 처리 결과로 바꾼다. 마감을 넘겼으면 `DEADLINE_EXCEEDED`, 클라이언트가 떠났으면 조용히 끝낸다.
+fn sent_result(sent: Sent) -> Result<bool, Status> {
+    match sent {
+        Sent::Ok => Ok(true),
+        Sent::Gone => Ok(false),
+        Sent::Expired => Err(deadline_exceeded()),
+    }
 }
 
 // --- proto 변환 ---
@@ -385,11 +431,13 @@ fn check_frame_complete(buf: &[u8], frame_bytes: usize) -> Result<(), Status> {
 }
 
 /// 애니메이션의 `frame_index`번째 합성 프레임을 보낸다. WebPAnimDecoder는 순차 합성만 지원하므로 0번부터 합성한다
-/// (docs/design/grpc-api.md §2.4). blocking 스레드에서 부른다.
+/// (docs/design/grpc-api.md §2.4). 합성량(캔버스 × (frame_index + 1))이 상한을 넘으면 디코딩 전에 거부하고, 프레임
+/// 사이와 전송에서 요청 시간 상한을 지킨다(ADR-0017). blocking 스레드에서 부른다.
 fn send_animation_frame(
     data: &[u8],
     frame_index: u32,
     limits: &Limits,
+    slot: &Slot,
     tx: &mpsc::Sender<Result<pb::DecodeResponse, Status>>,
 ) -> Result<(), Status> {
     use pb::decode_response::Payload;
@@ -400,22 +448,31 @@ fn send_animation_frame(
             "frame_index {frame_index} is out of range ({count} frames)"
         )));
     }
+    check_composited(info.features.pixel_count(), u64::from(frame_index) + 1, limits)?;
     let mut decoder = webp::AnimDecoder::new(data).map_err(to_status)?;
     let (width, height) = (decoder.info().canvas_width, decoder.info().canvas_height);
     let mut index = 0;
-    while let Some((canvas, _)) = decoder.next_frame().map_err(to_status)? {
+    loop {
+        slot.check()?;
+        let Some((canvas, _)) = decoder.next_frame().map_err(to_status)? else {
+            break;
+        };
         if index == frame_index {
             let duration = info.frames[index as usize].duration_ms;
             let header = frame_header(index, width, height, canvas.len(), true, duration);
-            if tx
-                .blocking_send(Ok(pb::DecodeResponse {
-                    payload: Some(Payload::Header(header)),
-                }))
-                .is_ok()
-            {
-                blocking_send_chunks(tx, canvas, limits.max_chunk_bytes as usize, |b| pb::DecodeResponse {
-                    payload: Some(Payload::Pixels(b)),
-                });
+            let header = pb::DecodeResponse {
+                payload: Some(Payload::Header(header)),
+            };
+            if sent_result(blocking_send_until(tx, Ok(header), slot.deadline()))? {
+                sent_result(blocking_send_chunks(
+                    tx,
+                    canvas,
+                    limits.max_chunk_bytes as usize,
+                    slot.deadline(),
+                    |b| pb::DecodeResponse {
+                        payload: Some(Payload::Pixels(b)),
+                    },
+                ))?;
             }
             return Ok(());
         }
@@ -427,44 +484,56 @@ fn send_animation_frame(
 }
 
 /// DecodeAnimation 응답을 보낸다: 특성 1개 → (프레임 헤더 → 픽셀 조각들) × 프레임 수. 정지 이미지는 프레임 1개.
-/// blocking 스레드에서 부른다. 클라이언트가 떠나면 조용히 끝낸다.
+/// 합성량(캔버스 × 프레임 수)이 상한을 넘으면 아무것도 보내기 전에 거부하고, 프레임 사이와 전송에서 요청 시간 상한을
+/// 지킨다(ADR-0017). blocking 스레드에서 부른다. 클라이언트가 떠나면 조용히 끝낸다.
 fn stream_animation(
     data: &[u8],
     features: &webp::Features,
     limits: &Limits,
+    slot: &Slot,
     tx: &mpsc::Sender<Result<pb::DecodeAnimationResponse, Status>>,
 ) -> Result<(), Status> {
     use pb::decode_animation_response::Payload;
     let info = webp::container_info(data, limits.max_frames).map_err(to_status)?;
+    check_composited(features.pixel_count(), info.frames.len().max(1) as u64, limits)?;
     let chunk = limits.max_chunk_bytes as usize;
+    let deadline = slot.deadline();
     let send = |p: Payload| {
-        tx.blocking_send(Ok(pb::DecodeAnimationResponse { payload: Some(p) }))
-            .is_ok()
+        sent_result(blocking_send_until(
+            tx,
+            Ok(pb::DecodeAnimationResponse { payload: Some(p) }),
+            deadline,
+        ))
     };
-    if !send(Payload::Features(to_pb_features(&info))) {
+    let send_pixels = |pixels: &[u8]| {
+        sent_result(blocking_send_chunks(tx, pixels, chunk, deadline, |b| {
+            pb::DecodeAnimationResponse {
+                payload: Some(Payload::Pixels(b)),
+            }
+        }))
+    };
+    if !send(Payload::Features(to_pb_features(&info)))? {
         return Ok(());
     }
     if !features.has_animation {
         let pixels = webp::decode_still_rgba(data, features).map_err(to_status)?;
         let header = frame_header(0, features.width, features.height, pixels.len(), features.has_alpha, 0);
-        if send(Payload::Frame(header)) {
-            blocking_send_chunks(tx, &pixels, chunk, |b| pb::DecodeAnimationResponse {
-                payload: Some(Payload::Pixels(b)),
-            });
+        if send(Payload::Frame(header))? {
+            send_pixels(&pixels)?;
         }
         return Ok(());
     }
     let mut decoder = webp::AnimDecoder::new(data).map_err(to_status)?;
     let (width, height) = (decoder.info().canvas_width, decoder.info().canvas_height);
     let mut index = 0u32;
-    while let Some((canvas, _)) = decoder.next_frame().map_err(to_status)? {
+    loop {
+        slot.check()?;
+        let Some((canvas, _)) = decoder.next_frame().map_err(to_status)? else {
+            break;
+        };
         let duration = info.frames.get(index as usize).map_or(0, |f| f.duration_ms);
         let header = frame_header(index, width, height, canvas.len(), true, duration);
-        let sent = send(Payload::Frame(header))
-            && blocking_send_chunks(tx, canvas, chunk, |b| pb::DecodeAnimationResponse {
-                payload: Some(Payload::Pixels(b)),
-            });
-        if !sent {
+        if !send(Payload::Frame(header))? || !send_pixels(canvas)? {
             return Ok(());
         }
         index += 1;
@@ -496,6 +565,7 @@ impl WebPService for WebpService {
                 max_frames: l.max_frames,
                 max_metadata_bytes: l.max_metadata_bytes,
                 max_chunk_bytes: l.max_chunk_bytes,
+                max_composited_pixels: l.max_composited_pixels,
             }),
             pixel_formats: vec![pb::PixelFormat::Rgba8 as i32],
         }))
@@ -507,17 +577,17 @@ impl WebPService for WebpService {
     ) -> Result<Response<pb::GetFeaturesResponse>, Status> {
         let limits = self.limits;
         let mut stream = request.into_inner();
-        let (options, data, permit) = collect_input(
+        let (options, data, slot) = collect_input(
             &mut stream,
             limits.max_chunk_bytes,
-            &self.permits,
+            &self.admission,
             |o: &pb::GetFeaturesOptions| check_input_bytes(o.input_bytes, &limits),
         )
         .await?;
 
         // 헤더와 청크 목록만 읽는다(픽셀 디코딩 없음). 입력 버퍼를 들고 있는 동안 슬롯을 유지한다.
         let response = run_blocking(move || {
-            let _permit = permit;
+            let _slot = slot;
             let info = webp::container_info(&data, limits.max_frames).map_err(to_status)?;
             let metadata = if options.include_metadata {
                 Some(to_pb_metadata(
@@ -541,13 +611,14 @@ impl WebPService for WebpService {
     ) -> Result<Response<Self::DecodeStream>, Status> {
         let limits = self.limits;
         let mut stream = request.into_inner();
-        let (options, data, permit) = collect_input(
+        let (options, data, slot) = collect_input(
             &mut stream,
             limits.max_chunk_bytes,
-            &self.permits,
+            &self.admission,
             |o: &pb::DecodeOptions| check_input_bytes(o.input_bytes, &limits),
         )
         .await?;
+        let deadline = slot.deadline();
         check_pixel_format(options.pixel_format)?;
 
         // 헤더만 읽어(빠름) 상한을 먼저 검사한다. 넘으면 버퍼를 할당하지 않고 거부한다.
@@ -558,12 +629,14 @@ impl WebPService for WebpService {
             let (tx, rx) = mpsc::channel(RESPONSE_CHANNEL_DEPTH);
             let frame_index = options.frame_index;
             tokio::task::spawn_blocking(move || {
-                let _permit = permit;
-                if let Err(status) = send_animation_frame(&data, frame_index, &limits, &tx) {
-                    let _ = tx.blocking_send(Err(status));
+                if let Err(status) = send_animation_frame(&data, frame_index, &limits, &slot, &tx) {
+                    blocking_report(&tx, status, deadline);
                 }
             });
-            return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
+            return Ok(Response::new(Box::pin(DeadlineStream::new(
+                ReceiverStream::new(rx),
+                deadline,
+            ))));
         }
         if options.frame_index != 0 {
             return Err(Status::out_of_range(format!(
@@ -577,7 +650,7 @@ impl WebPService for WebpService {
         let (tx, rx) = mpsc::channel(RESPONSE_CHANNEL_DEPTH);
         let pool = self.pool.clone();
         tokio::spawn(async move {
-            let _permit = permit;
+            let _slot = slot;
             let decode_pool = pool.clone();
             let decoded = run_blocking(move || {
                 let len = features.pixel_count() as usize * 4;
@@ -597,8 +670,8 @@ impl WebPService for WebpService {
                     let header = pb::DecodeResponse {
                         payload: Some(pb::decode_response::Payload::Header(header)),
                     };
-                    if tx.send(Ok(header)).await.is_ok() {
-                        send_chunks(&tx, pool.wrap(pixels), limits.max_chunk_bytes as usize, |b| {
+                    if send_until(&tx, Ok(header), deadline).await == Sent::Ok {
+                        send_chunks(&tx, pool.wrap(pixels), limits.max_chunk_bytes as usize, deadline, |b| {
                             pb::DecodeResponse {
                                 payload: Some(pb::decode_response::Payload::Pixels(b)),
                             }
@@ -607,11 +680,14 @@ impl WebPService for WebpService {
                     }
                 }
                 Err(status) => {
-                    let _ = tx.send(Err(status)).await;
+                    let _ = send_until(&tx, Err(status), deadline).await;
                 }
             }
         });
-        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
+        Ok(Response::new(Box::pin(DeadlineStream::new(
+            ReceiverStream::new(rx),
+            deadline,
+        ))))
     }
 
     async fn decode_animation(
@@ -620,13 +696,14 @@ impl WebPService for WebpService {
     ) -> Result<Response<Self::DecodeAnimationStream>, Status> {
         let limits = self.limits;
         let mut stream = request.into_inner();
-        let (options, data, permit) = collect_input(
+        let (options, data, slot) = collect_input(
             &mut stream,
             limits.max_chunk_bytes,
-            &self.permits,
+            &self.admission,
             |o: &pb::DecodeAnimationOptions| check_input_bytes(o.input_bytes, &limits),
         )
         .await?;
+        let deadline = slot.deadline();
         check_pixel_format(options.pixel_format)?;
         let features = webp::features(&data).map_err(to_status)?;
         check_canvas(&features, effective_max_pixels(&limits, options.max_pixels))?;
@@ -634,12 +711,14 @@ impl WebPService for WebpService {
         // 특성 → (프레임 헤더 → 픽셀 조각들) × 프레임 수. 채널이 차면 디코딩이 멈추고, 클라이언트가 떠나면 끝낸다.
         let (tx, rx) = mpsc::channel(RESPONSE_CHANNEL_DEPTH);
         tokio::task::spawn_blocking(move || {
-            let _permit = permit;
-            if let Err(status) = stream_animation(&data, &features, &limits, &tx) {
-                let _ = tx.blocking_send(Err(status));
+            if let Err(status) = stream_animation(&data, &features, &limits, &slot, &tx) {
+                blocking_report(&tx, status, deadline);
             }
         });
-        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
+        Ok(Response::new(Box::pin(DeadlineStream::new(
+            ReceiverStream::new(rx),
+            deadline,
+        ))))
     }
 
     async fn encode(
@@ -650,10 +729,10 @@ impl WebPService for WebpService {
         let mut stream = request.into_inner();
 
         // options를 먼저 검증하고(크기, 상한, 품질) 그 크기만큼 픽셀을 받는다.
-        let (options, pixels, permit) = collect_input(
+        let (options, pixels, slot) = collect_input(
             &mut stream,
             limits.max_chunk_bytes,
-            &self.permits,
+            &self.admission,
             |o: &pb::EncodeOptions| {
                 check_pixel_format(o.pixel_format)?;
                 webp::check_dimensions(o.width, o.height).map_err(to_status)?;
@@ -672,9 +751,10 @@ impl WebPService for WebpService {
         .await?;
 
         // 인코딩하고 헤더 → WebP 조각 순서로 보낸다. 전송이 끝날 때까지 슬롯을 유지한다.
+        let deadline = slot.deadline();
         let (tx, rx) = mpsc::channel(RESPONSE_CHANNEL_DEPTH);
         tokio::spawn(async move {
-            let _permit = permit;
+            let _slot = slot;
             let params = to_webp_params(options.params.as_ref());
             let metadata = to_webp_metadata(options.metadata.as_ref());
             let result = run_blocking(move || {
@@ -691,21 +771,28 @@ impl WebPService for WebpService {
                     let header = pb::EncodeResponse {
                         payload: Some(pb::encode_response::Payload::Header(header)),
                     };
-                    if tx.send(Ok(header)).await.is_ok() {
-                        send_chunks(&tx, Bytes::from(encoded), limits.max_chunk_bytes as usize, |b| {
-                            pb::EncodeResponse {
+                    if send_until(&tx, Ok(header), deadline).await == Sent::Ok {
+                        send_chunks(
+                            &tx,
+                            Bytes::from(encoded),
+                            limits.max_chunk_bytes as usize,
+                            deadline,
+                            |b| pb::EncodeResponse {
                                 payload: Some(pb::encode_response::Payload::WebpData(b)),
-                            }
-                        })
+                            },
+                        )
                         .await;
                     }
                 }
                 Err(status) => {
-                    let _ = tx.send(Err(status)).await;
+                    let _ = send_until(&tx, Err(status), deadline).await;
                 }
             }
         });
-        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
+        Ok(Response::new(Box::pin(DeadlineStream::new(
+            ReceiverStream::new(rx),
+            deadline,
+        ))))
     }
 
     async fn encode_animation(
@@ -738,12 +825,8 @@ impl WebPService for WebpService {
         let params = to_webp_params(options.params.as_ref());
         webp::encoder_config(&params).map_err(to_status)?;
         let frame_bytes = (pixel_count * webp::BYTES_PER_PIXEL as u64) as usize;
-        let permit = self
-            .permits
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|_| Status::unavailable("server is shutting down"))?;
+        let slot = self.admission.acquire().await?;
+        let deadline = slot.deadline();
 
         // 인코더는 blocking 작업 스레드가 가진다. 완성된 프레임을 받는 대로 넘긴다(입력 전체를 모으지 않는다).
         let (frame_tx, mut frame_rx) = mpsc::channel::<(u32, Vec<u8>)>(1);
@@ -753,7 +836,13 @@ impl WebPService for WebpService {
             let mut encoder =
                 webp::AnimEncoder::new(width, height, loop_count, background, &params).map_err(to_status)?;
             while let Some((duration_ms, rgba)) = frame_rx.blocking_recv() {
+                if tokio::time::Instant::now() >= deadline {
+                    return Err(deadline_exceeded());
+                }
                 encoder.add_frame(&rgba, duration_ms).map_err(to_status)?;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err(deadline_exceeded());
             }
             let encoded = encoder.finish().map_err(to_status)?;
             webp::add_metadata(encoded, &metadata).map_err(to_status)
@@ -764,7 +853,7 @@ impl WebPService for WebpService {
             let mut current: Option<(u32, Vec<u8>)> = None;
             let mut frames = 0u32;
             loop {
-                let message = stream.message().await?;
+                let message = receive_until(&mut stream, deadline).await?;
                 let payload = match message {
                     Some(m) => m.payload,
                     None => break,
@@ -784,6 +873,8 @@ impl WebPService for WebpService {
                                 limits.max_frames
                             )));
                         }
+                        // ADR-0017: 프레임 수를 미리 알 수 없으므로 받을 때마다 합성량을 센다.
+                        check_composited(pixel_count, u64::from(frames), &limits)?;
                         let mut buf = Vec::new();
                         buf.try_reserve_exact(frame_bytes)
                             .map_err(|_| Status::resource_exhausted("cannot allocate a frame buffer"))?;
@@ -836,23 +927,30 @@ impl WebPService for WebpService {
         // 헤더 → WebP 조각. 전송이 끝날 때까지 슬롯을 유지한다.
         let (tx, rx) = mpsc::channel(RESPONSE_CHANNEL_DEPTH);
         tokio::spawn(async move {
-            let _permit = permit;
+            let _slot = slot;
             let header = pb::EncodedHeader {
                 webp_bytes: encoded.len() as u64,
             };
             let header = pb::EncodeAnimationResponse {
                 payload: Some(pb::encode_animation_response::Payload::Header(header)),
             };
-            if tx.send(Ok(header)).await.is_ok() {
-                send_chunks(&tx, Bytes::from(encoded), limits.max_chunk_bytes as usize, |b| {
-                    pb::EncodeAnimationResponse {
+            if send_until(&tx, Ok(header), deadline).await == Sent::Ok {
+                send_chunks(
+                    &tx,
+                    Bytes::from(encoded),
+                    limits.max_chunk_bytes as usize,
+                    deadline,
+                    |b| pb::EncodeAnimationResponse {
                         payload: Some(pb::encode_animation_response::Payload::WebpData(b)),
-                    }
-                })
+                    },
+                )
                 .await;
             }
         });
-        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
+        Ok(Response::new(Box::pin(DeadlineStream::new(
+            ReceiverStream::new(rx),
+            deadline,
+        ))))
     }
 }
 

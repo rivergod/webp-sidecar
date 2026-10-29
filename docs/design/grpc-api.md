@@ -94,6 +94,7 @@ sequenceDiagram
 | `max_frames` | 애니메이션 프레임 수 | demux 직후(디코딩), 프레임 수신 중(인코딩) | 1,000 |
 | `max_metadata_bytes` | ICC+EXIF+XMP 합 | demux 직후, `options` 수신 즉시(인코딩) | 2 MiB |
 | `max_chunk_bytes` | 조각 하나 크기 | 조각 수신마다 | 1 MiB (ADR-0003) |
+| `max_composited_pixels` | 합성 픽셀 수: 캔버스 width × height × 프레임 수 | 디코딩: 헤더·프레임 목록만 읽은 뒤 디코더를 만들기 전(`Decode`는 요청한 프레임 번호 + 1까지). 인코딩: 프레임을 받을 때마다 누적 | 2^30 (1,073,741,824) ([ADR-0017](../adr/0017-output-volume-limits.md)) |
 
 - **상한은 서버 설정값이다**(결정 2026-10-23). 코드에 고정하지 않고 서버가 시작할 때 설정에서 읽어 적용하며, `GetInfo`의 `Limits`로 그대로 노출한다. 설정 키는 §3.1, 기본값은 [ADR-0012](../adr/0012-server-runtime-config.md).
 - 서버는 시작할 때 설정값을 검사한다. `max_chunk_bytes`와 `max_metadata_bytes`는 메시지 하나에 실리므로 gRPC 기본 메시지 한도(4MB)보다 작아야 한다(ADR-0003의 불변식). 어기면 시작하지 않는다.
@@ -102,6 +103,20 @@ sequenceDiagram
 - 클라이언트는 `DecodeOptions.max_pixels`로 더 엄격한 상한을 보낼 수 있다. 서버는 둘 중 작은 값을 적용한다.
 - 클라이언트도 응답 `FrameHeader`를 받으면 할당 전에 다시 검증한다. Java 배열 한도(약 2^31 원소) 때문에 RGBA8 `byte[]` 하나로는 약 5.3억 픽셀을 넘을 수 없다. libwebp 최대 크기(16383 × 16383 ≈ 2.7억 픽셀)는 그 안에 든다.
 - 정지 이미지는 `WebPGetFeatures`로, 애니메이션은 `WebPDemux`의 캔버스 크기와 프레임 수로 검사한다.
+- **요청당 작업량**(ADR-0017): `max_composited_pixels`는 출력량 폭탄(작은 캔버스·많은 프레임처럼 하나하나는 상한 안이지만 곱이 큰 파일)을 픽셀을 만들기 전에 거부한다. 이와 별도로 서버는 요청마다 시간 상한(`max_request_ms`)과 대기 상한(`max_queued_requests`)을 둔다(§3.2).
+
+### 3.2 요청 시간 상한과 대기 상한
+
+[ADR-0017](../adr/0017-output-volume-limits.md). `Limits`에는 넣지 않는다(입력 검사가 아니라 서버 운영 정책이다).
+
+| 정책 | 정의 | 넘을 때 |
+|---|---|---|
+| `max_request_ms` | 동시 처리 슬롯을 잡은 때부터 응답을 다 보낼 때까지의 벽시계 시간. 입력 조각 수신, 프레임 사이, 응답 조각 전송이 모두 남은 시간만큼만 기다린다 | `DEADLINE_EXCEEDED`("request exceeded max_request_ms on the server")로 끝내고 슬롯을 놓는다. 이미 보낸 응답 뒤에 오류가 오므로 클라이언트는 잘린 응답을 정상 끝으로 보지 않는다 |
+| `max_queued_requests` | 슬롯을 기다리는 요청 수(서버 전체) | 기다리지 않고 바로 `UNAVAILABLE`("server busy: N requests queued ...; retry later") |
+
+- 시간 상한은 libwebp 함수 한 번(정지 이미지 디코딩·인코딩 한 번) 안에서는 멈추지 못한다. 그 시간은 `max_pixels`가 묶는다.
+- 대기 중인 요청이 취소되면 대기 자리도 바로 돌려준다.
+- 모든 RPC는 첫 메시지(`options`)를 받아 선언 크기를 검사한 뒤 슬롯을 잡는다. 시간 상한은 그때부터 잰다. 슬롯을 기다리는 시간은 클라이언트 데드라인만 묶는다.
 
 ### 3.1 서버 설정 키
 
@@ -120,6 +135,9 @@ sequenceDiagram
 | `--max-concurrency` | `WEBP_SERVER_MAX_CONCURRENCY` | `2` | 동시에 libwebp 작업을 하는 요청 수 |
 | `--buffer-pool-bytes` | `WEBP_SERVER_BUFFER_POOL_BYTES` | `134217728` (128 MiB) | 정지 이미지 출력 버퍼 풀 총량 상한, 0이면 끔([ADR-0018](../adr/0018-decode-output-buffer-pool.md)) |
 | `--buffer-pool-idle-ms` | `WEBP_SERVER_BUFFER_POOL_IDLE_MS` | `30000` | 풀 버퍼 유휴 만료(ADR-0018) |
+| `--max-composited-pixels` | `WEBP_SERVER_MAX_COMPOSITED_PIXELS` | `1073741824` (2^30) | `Limits.max_composited_pixels`. 요청 하나의 합성 픽셀 수(캔버스 × 프레임) 상한([ADR-0017](../adr/0017-output-volume-limits.md)) |
+| `--max-request-ms` | `WEBP_SERVER_MAX_REQUEST_MS` | `60000` | 슬롯을 잡은 뒤 요청 하나의 시간 상한(ADR-0017) |
+| `--max-queued-requests` | `WEBP_SERVER_MAX_QUEUED_REQUESTS` | `8` | 슬롯을 기다릴 수 있는 요청 수, 0이면 상한 없음(ADR-0017) |
 
 로그 수준은 `RUST_LOG` 환경변수로 정한다(Rust `tracing` 관례).
 
@@ -131,8 +149,10 @@ sequenceDiagram
 
 | 상황 | status | libwebp 원인 예 | 클라이언트 처리 |
 |---|---|---|---|
-| 서버에 연결할 수 없음, 서버 재시작·크래시, 종료 중 | `UNAVAILABLE` | (프로세스 크래시) | `IIOException("WebP server unavailable: <endpoint>", cause)` |
-| 데드라인 초과 | `DEADLINE_EXCEEDED` | - | `IIOException("WebP server timed out after <n> ms", cause)` |
+| 서버에 연결할 수 없음, 서버 재시작·크래시, 종료 중 | `UNAVAILABLE` | (프로세스 크래시) | `IIOException("WebP server unavailable (<endpoint>)...", cause)` |
+| 서버 혼잡: 대기 상한 초과(ADR-0017) | `UNAVAILABLE`, 메시지가 "server busy"로 시작 | - | `IIOException("WebP server busy (<endpoint>)...", cause)`. 앱이 물러섰다가 다시 시도한다 |
+| 클라이언트 데드라인 초과 | `DEADLINE_EXCEEDED` | - | `IIOException("WebP server timed out after <n> ms (<rpc>)", cause)` |
+| 서버 요청 시간 상한 초과(ADR-0017) | `DEADLINE_EXCEEDED`, 메시지에 "max_request_ms" | - | `IIOException("WebP server request time limit exceeded (<rpc>)...", cause)` |
 | WebP가 아님, 손상, 잘림 | `INVALID_ARGUMENT` | `VP8_STATUS_BITSTREAM_ERROR`, `VP8_STATUS_NOT_ENOUGH_DATA`, `VP8_STATUS_UNSUPPORTED_FEATURE`, `WEBP_MUX_BAD_DATA` | `IIOException("Invalid or corrupted WebP data: <message>", cause)` |
 | 프로토콜 위반 (메시지 순서, 선언 크기 불일치, 조각 크기 초과), 잘못된 옵션 | `INVALID_ARGUMENT` | - | `IIOException` (클라이언트 버그이므로 메시지에 RPC 이름 포함) |
 | 서버 상한 초과 | `RESOURCE_EXHAUSTED` | - | `IIOException("WebP image exceeds server limit: <message>", cause)` |

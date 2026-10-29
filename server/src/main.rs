@@ -45,12 +45,18 @@ async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     let v = webp_imageio_server::webp::versions();
     tracing::info!(
         libwebp = %v.decoder, uds = %config.uds_path.display(), tcp = ?config.tcp_addr,
-        limits = ?config.limits, max_concurrency = config.max_concurrency, buffer_pool = ?config.buffer_pool, "starting"
+        limits = ?config.limits, max_concurrency = config.max_concurrency, buffer_pool = ?config.buffer_pool,
+        request_policy = ?config.request_policy, "starting"
     );
 
     // 두 리스너가 같은 서비스(상한, 동시 처리 슬롯)를 공유한다.
     let pool = BufferPool::new(config.buffer_pool);
-    let service = WebpService::with_pool(config.limits, config.max_concurrency, pool.clone());
+    let service = WebpService::with_config(
+        config.limits,
+        config.max_concurrency,
+        pool.clone(),
+        config.request_policy,
+    );
     // 출력 버퍼 풀의 유휴 버퍼를 주기적으로 해제한다(ADR-0018). 부하가 끝나면 상주 메모리가 돌아온다.
     if config.buffer_pool.max_bytes > 0 {
         let period = (config.buffer_pool.idle / 2).max(std::time::Duration::from_millis(1));

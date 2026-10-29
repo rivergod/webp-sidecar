@@ -8,6 +8,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use tonic::Code;
+use webp_imageio_server::config::Limits;
 
 fn samples_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../samples")
@@ -271,23 +272,22 @@ async fn malformed_animation_files_follow_libwebp_outcome() {
     // when / then: libwebp(WebPAnimDecoder)가 거부한 파일은 서버도 거부한다. 받은 파일은 서버도 받는다.
     // 서버는 상한(max_frames 등)을 추가로 적용하므로, 상한을 넘는 파일은 libwebp가 받아도 RESOURCE_EXHAUSTED가 맞다.
     let mut failures = Vec::new();
-    let mut skipped = Vec::new();
+    let mut bombs = Vec::new();
     for entry in &entries {
         let (path, data) = read_sample(entry);
         let expected = &entry["expected"];
+        // 출력량 폭탄(예: 4096² 캔버스 × 1000프레임 ≈ 64 GiB)은 합성 픽셀 수 상한(ADR-0017)에 걸려 픽셀을 보내기 전에
+        // RESOURCE_EXHAUSTED여야 한다. manifest의 exceeds_default_limits는 이 상한이 생기기 전에 기록한 값이라 여기서 더한다.
+        let demux = &expected["observed"]["demux"];
+        let composited = demux["canvas_width"].as_u64().unwrap_or(0)
+            * demux["canvas_height"].as_u64().unwrap_or(0)
+            * demux["frame_count"].as_u64().unwrap_or(0);
         let over_limit = expected["exceeds_default_limits"]
             .as_array()
-            .is_some_and(|l| !l.is_empty());
-        // 출력량 폭탄(예: 4096² 캔버스 × 1000프레임 ≈ 64 GiB)은 기본 상한을 통과하므로 끝까지 받으면 테스트가
-        // 수십 GiB를 쓴다. 이런 파일은 건너뛰고 기록한다(출력량 상한은 Phase 5 검토 항목 — docs/research/0005).
-        let demux = &expected["observed"]["demux"];
-        let output_bytes = demux["canvas_width"].as_u64().unwrap_or(0)
-            * demux["canvas_height"].as_u64().unwrap_or(0)
-            * demux["frame_count"].as_u64().unwrap_or(0)
-            * 4;
-        if !over_limit && output_bytes > (1 << 30) {
-            skipped.push(format!("{path} ({} MiB of composited output)", output_bytes >> 20));
-            continue;
+            .is_some_and(|l| !l.is_empty())
+            || composited > Limits::default().max_composited_pixels;
+        if composited > Limits::default().max_composited_pixels {
+            bombs.push(path.clone());
         }
         let result = decode_animation(&mut client, &data).await;
         match (expected["outcome"].as_str().unwrap(), over_limit, result) {
@@ -304,9 +304,7 @@ async fn malformed_animation_files_follow_libwebp_outcome() {
             )),
         }
     }
-    if !skipped.is_empty() {
-        eprintln!("skipped output bombs: {skipped:?}");
-    }
+    assert!(!bombs.is_empty(), "expected at least one output-bomb sample");
     assert!(
         failures.is_empty(),
         "{} mismatches:\n{}",

@@ -2,6 +2,7 @@
 //!
 //! 키 표: docs/design/grpc-api.md §3.1. 환경변수 조회를 함수로 주입받아 테스트가 프로세스 환경에 의존하지 않게 한다.
 
+use crate::admission::RequestPolicy;
 use crate::pool::PoolConfig;
 use clap::Parser;
 use std::fmt;
@@ -49,6 +50,15 @@ pub struct Cli {
     /// 동시에 libwebp 작업을 하는 요청 수 [env: WEBP_SERVER_MAX_CONCURRENCY] [기본: 2]
     #[arg(long)]
     pub max_concurrency: Option<String>,
+    /// 요청 하나의 합성 픽셀 수 상한(캔버스 × 프레임) [env: WEBP_SERVER_MAX_COMPOSITED_PIXELS] [기본: 1073741824]
+    #[arg(long)]
+    pub max_composited_pixels: Option<String>,
+    /// 슬롯을 잡은 뒤 요청 하나의 시간 상한(ms) [env: WEBP_SERVER_MAX_REQUEST_MS] [기본: 60000]
+    #[arg(long)]
+    pub max_request_ms: Option<String>,
+    /// 슬롯을 기다릴 수 있는 요청 수. 0이면 상한 없음 [env: WEBP_SERVER_MAX_QUEUED_REQUESTS] [기본: 8]
+    #[arg(long)]
+    pub max_queued_requests: Option<String>,
     /// 정지 이미지 출력 버퍼 풀 총량 상한(바이트). 0이면 끈다 [env: WEBP_SERVER_BUFFER_POOL_BYTES] [기본: 134217728]
     #[arg(long)]
     pub buffer_pool_bytes: Option<String>,
@@ -70,6 +80,8 @@ pub struct Limits {
     pub max_metadata_bytes: u64,
     /// 데이터 조각 최대 크기. 단위: 바이트.
     pub max_chunk_bytes: u32,
+    /// 요청 하나가 합성하는 캔버스 픽셀 수의 합 상한(ADR-0017).
+    pub max_composited_pixels: u64,
 }
 
 impl Default for Limits {
@@ -81,6 +93,7 @@ impl Default for Limits {
             max_frames: 1000,
             max_metadata_bytes: 2 * 1024 * 1024,
             max_chunk_bytes: 1024 * 1024,
+            max_composited_pixels: 1 << 30,
         }
     }
 }
@@ -100,6 +113,8 @@ pub struct Config {
     pub max_concurrency: usize,
     /// 정지 이미지 출력 버퍼 풀(ADR-0018).
     pub buffer_pool: PoolConfig,
+    /// 대기 상한과 요청 시간 상한(ADR-0017).
+    pub request_policy: RequestPolicy,
 }
 
 /// 설정 값을 해석하거나 검증하다 실패했다.
@@ -200,6 +215,12 @@ impl Config {
                 d.max_chunk_bytes,
                 &env,
             )?,
+            max_composited_pixels: parse_num(
+                cli.max_composited_pixels.as_deref(),
+                "WEBP_SERVER_MAX_COMPOSITED_PIXELS",
+                d.max_composited_pixels,
+                &env,
+            )?,
         };
         let max_concurrency = parse_num(
             cli.max_concurrency.as_deref(),
@@ -216,9 +237,13 @@ impl Config {
         if limits.max_metadata_bytes > message_budget {
             return Err(ConfigError(format!("max_metadata_bytes must be <= {message_budget}")));
         }
-        if limits.max_input_bytes == 0 || limits.max_pixels == 0 || limits.max_frames == 0 {
+        if limits.max_input_bytes == 0
+            || limits.max_pixels == 0
+            || limits.max_frames == 0
+            || limits.max_composited_pixels == 0
+        {
             return Err(ConfigError(
-                "max_input_bytes, max_pixels and max_frames must be >= 1".into(),
+                "max_input_bytes, max_pixels, max_frames and max_composited_pixels must be >= 1".into(),
             ));
         }
         if max_concurrency == 0 {
@@ -240,6 +265,22 @@ impl Config {
         if buffer_pool_idle_ms == 0 {
             return Err(ConfigError("buffer_pool_idle_ms must be >= 1".into()));
         }
+        let policy_default = RequestPolicy::default();
+        let max_request_ms = parse_num(
+            cli.max_request_ms.as_deref(),
+            "WEBP_SERVER_MAX_REQUEST_MS",
+            policy_default.max_request.as_millis() as u64,
+            &env,
+        )?;
+        if max_request_ms == 0 {
+            return Err(ConfigError("max_request_ms must be >= 1".into()));
+        }
+        let max_queued_requests = parse_num(
+            cli.max_queued_requests.as_deref(),
+            "WEBP_SERVER_MAX_QUEUED_REQUESTS",
+            policy_default.max_queued_requests,
+            &env,
+        )?;
         Ok(Self {
             uds_path,
             uds_mode,
@@ -249,6 +290,10 @@ impl Config {
             buffer_pool: PoolConfig {
                 max_bytes: buffer_pool_bytes,
                 idle: std::time::Duration::from_millis(buffer_pool_idle_ms),
+            },
+            request_policy: RequestPolicy {
+                max_queued_requests,
+                max_request: std::time::Duration::from_millis(max_request_ms),
             },
         })
     }
@@ -275,6 +320,38 @@ mod tests {
         assert_eq!(c.tcp_addr, None);
         assert_eq!(c.limits, Limits::default());
         assert_eq!(c.max_concurrency, 2);
+        assert_eq!(c.limits.max_composited_pixels, 1 << 30);
+        assert_eq!(c.request_policy, RequestPolicy::default());
+    }
+
+    #[test]
+    fn resolve_adr_0017_keys_from_env_are_applied() {
+        // when
+        let c = Config::resolve(
+            &Cli::default(),
+            env_of(&[
+                ("WEBP_SERVER_MAX_COMPOSITED_PIXELS", "1000"),
+                ("WEBP_SERVER_MAX_REQUEST_MS", "250"),
+                ("WEBP_SERVER_MAX_QUEUED_REQUESTS", "0"),
+            ]),
+        )
+        .unwrap();
+
+        // then
+        assert_eq!(c.limits.max_composited_pixels, 1000);
+        assert_eq!(c.request_policy.max_request, std::time::Duration::from_millis(250));
+        assert_eq!(c.request_policy.max_queued_requests, 0);
+    }
+
+    #[test]
+    fn resolve_zero_request_time_or_composited_limit_is_rejected() {
+        // when
+        let time = Config::resolve(&Cli::default(), env_of(&[("WEBP_SERVER_MAX_REQUEST_MS", "0")]));
+        let composited = Config::resolve(&Cli::default(), env_of(&[("WEBP_SERVER_MAX_COMPOSITED_PIXELS", "0")]));
+
+        // then
+        assert!(time.is_err());
+        assert!(composited.is_err());
     }
 
     #[test]

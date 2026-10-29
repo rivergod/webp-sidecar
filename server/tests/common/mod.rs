@@ -10,7 +10,9 @@ use tokio_stream::StreamExt;
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::Status;
 use tonic::transport::{Channel, Endpoint, Uri};
+use webp_imageio_server::admission::RequestPolicy;
 use webp_imageio_server::config::Limits;
+use webp_imageio_server::pool::{BufferPool, PoolConfig};
 use webp_imageio_server::proto as pb;
 use webp_imageio_server::proto::web_p_service_client::WebPServiceClient;
 use webp_imageio_server::router;
@@ -42,11 +44,17 @@ impl TestServer {
 
     /// 주어진 상한과 동시 처리 수로 띄운다.
     pub async fn start_with(limits: Limits, max_concurrency: usize) -> Self {
+        Self::start_with_policy(limits, max_concurrency, RequestPolicy::default()).await
+    }
+
+    /// 대기·시간 상한(ADR-0017)을 지정해 띄운다.
+    pub async fn start_with_policy(limits: Limits, max_concurrency: usize, policy: RequestPolicy) -> Self {
         let dir = tempfile::tempdir().expect("tempdir");
         let socket = dir.path().join("webp.sock");
         let listener = UnixListener::bind(&socket).expect("bind uds");
         let (stop, stopped) = oneshot::channel::<()>();
-        let router = router(WebpService::new(limits, max_concurrency)).await;
+        let service = WebpService::with_config(limits, max_concurrency, BufferPool::new(PoolConfig::default()), policy);
+        let router = router(service).await;
         tokio::spawn(
             router.serve_with_incoming_shutdown(UnixListenerStream::new(listener), async {
                 let _ = stopped.await;

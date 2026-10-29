@@ -29,6 +29,8 @@ simd-avx2 = ["libwebp-sys/sse41", "libwebp-sys/avx2"]
 tonic-prost-build = "=0.14.6"
 
 [dev-dependencies]
+# 시간 상한 테스트에서 가상 시간을 쓴다(tokio::time::pause/advance).
+tokio = { version = "1.54", features = ["test-util"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 tower = "0.5"
 tempfile = "3"
