@@ -1,6 +1,7 @@
 package net.rivergod.webp.imageio;
 
 import com.google.protobuf.ByteString;
+import java.nio.ByteOrder;
 import javax.imageio.IIOException;
 import net.rivergod.webp.imageio.proto.v1.FrameHeader;
 import net.rivergod.webp.imageio.proto.v1.PixelFormat;
@@ -88,6 +89,24 @@ final class ArgbFrameSink implements WebPClient.FrameReceiver {
             throw new IIOException("WebP server sent more pixel bytes than declared");
         }
         remainingBytes -= n;
+        if (carryLen == 0 && (n & 3) == 0) {
+            // 서버 조각은 픽셀 경계에 맞는 크기(기본 1 MiB)라 보통 이 경로다. 조각을 복사하지 않고 빅엔디언 int로
+            // 대상 배열에 한 번에 읽은 뒤(0xRRGGBBAA), 회전 한 번으로 ARGB를 만든다. 반복문은 JIT가 벡터화한다.
+            int count = n >>> 2;
+            chunk.asReadOnlyByteBuffer().order(ByteOrder.BIG_ENDIAN).asIntBuffer().get(argb, position, count);
+            int end = position + count;
+            if (alpha) {
+                for (int k = position; k < end; k++) {
+                    argb[k] = Integer.rotateRight(argb[k], 8);
+                }
+            } else {
+                for (int k = position; k < end; k++) {
+                    argb[k] >>>= 8;
+                }
+            }
+            position = end;
+            return;
+        }
         if (scratch.length < n) {
             scratch = new byte[n];
         }

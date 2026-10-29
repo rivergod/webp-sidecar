@@ -50,6 +50,33 @@ class ArgbFrameSinkTest {
     }
 
     @Test
+    void pixels_alignedAndSplitChunksMixed_matchesBytewiseConversion() throws IIOException {
+        // given: 픽셀 경계에 맞는 조각(빠른 경로)과 픽셀 중간에서 잘린 조각(이월 경로)을 섞는다
+        int pixels = 1000;
+        byte[] rgba = new byte[pixels * 4];
+        new java.util.SplittableRandom(7).nextBytes(rgba);
+        int[] cuts = {0, 64, 67, 128, 129, 2000, 2400, 4000};
+        for (boolean alpha : new boolean[] {true, false}) {
+            ArgbFrameSink sink = new ArgbFrameSink(pixels, 1, 0, alpha, null);
+            sink.header(header(pixels, 1, rgba.length));
+            for (int c = 0; c + 1 < cuts.length; c++) {
+                sink.pixels(ByteString.copyFrom(rgba, cuts[c], cuts[c + 1] - cuts[c]));
+            }
+
+            // when
+            sink.finish();
+
+            // then
+            int[] expected = new int[pixels];
+            for (int i = 0; i < pixels; i++) {
+                int rgb = (rgba[4 * i] & 0xff) << 16 | (rgba[4 * i + 1] & 0xff) << 8 | (rgba[4 * i + 2] & 0xff);
+                expected[i] = alpha ? (rgba[4 * i + 3] & 0xff) << 24 | rgb : rgb;
+            }
+            assertArrayEquals(expected, sink.argb(), "alpha=" + alpha);
+        }
+    }
+
+    @Test
     void header_overClientMaxPixels_rejectsBeforeAllocating() {
         // given
         ArgbFrameSink sink = new ArgbFrameSink(1000, 1000, 10, true, null);
