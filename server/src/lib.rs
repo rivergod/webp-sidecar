@@ -17,6 +17,22 @@ pub mod proto {
     tonic::include_proto!("webp.v1");
 }
 
+/// HTTP/2 스트림 수신 창(클라이언트 → 서버). 단위: 바이트.
+///
+/// 서버는 동시 처리 슬롯을 잡은 뒤에야 요청 입력을 읽는다. 슬롯을 기다리는 요청이 보낸 데이터는 읽히지 않은 채 연결 수신
+/// 창을 차지한다. 연결 창이 대기 요청들로 차면 슬롯을 가진 요청도 더 보낼 수 없어 끝나지 못하고, 슬롯이 풀리지 않아 모두
+/// 멈춘다(교착, docs/research/0012-gif-conversion-load.md). 그래서 연결 창을 "최대 동시 스트림 × 스트림 창"보다 넉넉히
+/// 크게 둔다(아래 불변식). hyper 기본값은 연결 창과 스트림 창이 둘 다 1 MiB라 대기 요청 하나로도 교착이 났다.
+pub const H2_STREAM_WINDOW_BYTES: u32 = 256 * 1024;
+/// 연결 하나의 최대 동시 스트림 수. 넘는 요청은 클라이언트가 자기 쪽에서 기다린다.
+pub const H2_MAX_CONCURRENT_STREAMS: u32 = 64;
+/// HTTP/2 연결 수신 창. 단위: 바이트. 대기 스트림 전부(최대 16 MiB)를 받고도 같은 크기의 여유가 남는다.
+pub const H2_CONNECTION_WINDOW_BYTES: u32 = 32 * 1024 * 1024;
+const _: () = assert!(
+    H2_CONNECTION_WINDOW_BYTES as u64 >= 2 * H2_MAX_CONCURRENT_STREAMS as u64 * H2_STREAM_WINDOW_BYTES as u64,
+    "the HTTP/2 connection window must exceed what waiting streams can hold"
+);
+
 /// 서비스와 표준 헬스체크(`grpc.health.v1.Health`)를 등록한 라우터를 만든다. 헬스 상태는 SERVING이다.
 ///
 /// 리스너(UDS, TCP)마다 한 번씩 부른다. 같은 [`service::WebpService`]를 복제해 넘기면 상한과 동시 처리 슬롯을 공유한다.
@@ -25,6 +41,9 @@ pub async fn router(service: service::WebpService) -> tonic::transport::server::
     let (reporter, health) = tonic_health::server::health_reporter();
     reporter.set_serving::<WebPServiceServer<service::WebpService>>().await;
     tonic::transport::Server::builder()
+        .initial_stream_window_size(H2_STREAM_WINDOW_BYTES)
+        .initial_connection_window_size(H2_CONNECTION_WINDOW_BYTES)
+        .max_concurrent_streams(H2_MAX_CONCURRENT_STREAMS)
         .add_service(health)
         .add_service(WebPServiceServer::new(service))
 }
