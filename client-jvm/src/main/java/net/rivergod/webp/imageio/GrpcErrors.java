@@ -24,9 +24,16 @@ final class GrpcErrors {
         }
         Status status = Status.fromThrowable(error);
         String detail = status.getDescription() == null ? "" : ": " + status.getDescription();
+        String description = status.getDescription() == null ? "" : status.getDescription();
         String message = switch (status.getCode()) {
-            case UNAVAILABLE -> "WebP server unavailable (" + config.endpoint() + ")" + detail;
-            case DEADLINE_EXCEEDED -> "WebP server timed out after " + config.deadlineMs() + " ms (" + rpc + ")";
+            // ADR-0017: 서버 대기 상한을 넘은 거부는 접속 불가와 구분한다(잠시 뒤 다시 시도할 수 있다).
+            case UNAVAILABLE -> description.startsWith("server busy")
+                    ? "WebP server busy (" + config.endpoint() + ")" + detail
+                    : "WebP server unavailable (" + config.endpoint() + ")" + detail;
+            // ADR-0017: 서버 쪽 요청 시간 상한과 클라이언트 데드라인을 구분한다.
+            case DEADLINE_EXCEEDED -> description.contains("max_request_ms")
+                    ? "WebP server request time limit exceeded (" + rpc + ")" + detail
+                    : "WebP server timed out after " + config.deadlineMs() + " ms (" + rpc + ")";
             case INVALID_ARGUMENT -> "Invalid or corrupted WebP data" + detail;
             case RESOURCE_EXHAUSTED -> "WebP image exceeds server limit" + detail;
             case OUT_OF_RANGE -> "WebP frame index out of range" + detail;
