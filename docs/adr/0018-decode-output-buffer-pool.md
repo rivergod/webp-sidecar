@@ -1,8 +1,8 @@
 # 0018. 정지 이미지 디코딩 출력 버퍼 재사용(버퍼 풀)과 만료 정책
 
-- 상태: proposed
+- 상태: accepted
 - 날짜: 2026-10-29
-- 결정자: -
+- 결정자: Ilkang Na
 - 관련 문서: [ADR-0012](0012-server-runtime-config.md)(서버 설정, musl 정적 + scratch), [ADR-0016](0016-memory-budget-admission.md)(메모리 예산, proposed), [docs/research/0009-benchmark-results.md](../research/0009-benchmark-results.md), [docs/roadmap.md](../roadmap.md) Phase 5-2
 
 ## 맥락
