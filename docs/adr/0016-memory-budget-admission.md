@@ -1,8 +1,8 @@
 # 0016. 메모리 예산 기반 요청 허용: 작업별 추정 메모리를 예산에서 예약한다
 
-- 상태: proposed
+- 상태: accepted
 - 날짜: 2026-10-23
-- 결정자: -
+- 결정자: Ilkang Na
 - 관련 문서: [ADR-0012](0012-server-runtime-config.md), [ADR-0018](0018-decode-output-buffer-pool.md)(버퍼 풀), [docs/research/0007-server-memory-budget.md](../research/0007-server-memory-budget.md), [docs/research/0012-gif-conversion-load.md](../research/0012-gif-conversion-load.md)
 - 개정: 2026-10-29 — 애니메이션 인코딩의 프레임 수 몫(research/0012)과 버퍼 풀(ADR-0018, accepted)을 반영했다. 같은 날 프레임 중간 추가 예약은 기다리지 않도록 고쳤고(교착 방지), 메모리 예약 → 슬롯 순서를 정했다. 풀 몫을 뺀 뒤의 인코딩 최대 크기 계산을 고쳤다
 
