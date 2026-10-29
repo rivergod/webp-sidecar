@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """JMH JSON 결과(bench/run.sh)를 요약 표(summary.md)와 CSV(results.csv)로 만든다.
 
-    python3 -I bench/scripts/summarize.py <결과 디렉터리>
+    python3 -I bench/scripts/summarize.py <결과 디렉터리> [--read-calls-getfeatures]
+
+--read-calls-getfeatures: 플러그인이 정지 이미지 읽기마다 GetFeatures를 부르던 때(Phase 4, 2026-10-23)의 결과를
+분해할 때 준다. Phase 5-2부터 플러그인은 정지 이미지 첫 읽기에서 GetFeatures를 부르지 않는다.
 
 판정(ADR-0011): 디코딩 처리량, M/L/XL, 이 플러그인 기본 전송(UDS)·기본 빌드(sse2-uds) 기준으로
 TwelveMonkeys의 3배 이상이고 darkxanter(JNI)의 50% 이상이면 충족.
@@ -211,10 +214,13 @@ FILE_MODES = {"lossy": "lossy_q75", "lossless": "lossless", "alpha": "lossy_alph
 DIMS = {"XS": (64, 64), "S": (256, 256), "M": (1024, 768), "L": (1920, 1080), "XL": (4000, 3000)}
 
 
-def breakdown_section(rows, decode_time: dict[str, float]) -> list[str]:
+def breakdown_section(rows, decode_time: dict[str, float], read_calls_getfeatures: bool) -> list[str]:
+    calls = ("GetFeatures RPC + Decode RPC" if read_calls_getfeatures
+             else "Decode RPC(정지 이미지 읽기는 GetFeatures를 부르지 않는다. GetFeatures 열은 참고값)")
+    client_rule = "전체에서 두 RPC를 뺀 값" if read_calls_getfeatures else "전체에서 Decode RPC를 뺀 값"
     out = ["## 사이드카 디코딩 시간 분해 (photo, UDS, ms/op)", "",
-           "플러그인 전체(DecodeBenchmark SIDECAR) = GetFeatures RPC + Decode RPC + 클라이언트 몫(변환 + ImageIO). "
-           "Decode RPC = 서버 libwebp 디코딩 + 전송·기타. 클라이언트 몫은 전체에서 두 RPC를 뺀 값, "
+           f"플러그인 전체(DecodeBenchmark SIDECAR) = {calls} + 클라이언트 몫(변환 + ImageIO). "
+           f"Decode RPC = 서버 libwebp 디코딩 + 전송·기타. 클라이언트 몫은 {client_rule}, "
            "전송·기타는 Decode RPC에서 서버 libwebp 디코딩(decode_time 예제, 중앙값, gRPC 없음)을 뺀 값이다. "
            "변환(측정)은 ConversionBenchmark(이미지 할당 포함) 값이다.", "",
            "| 모드 | 크기 | 전체 | GetFeatures | Decode RPC | ↳ 서버 libwebp | ↳ 전송·기타 | 클라이언트 몫 | 변환(측정) | "
@@ -234,7 +240,10 @@ def breakdown_section(rows, decode_time: dict[str, float]) -> list[str]:
                 continue
             any_row = True
             t, d, f = ms(total), ms(dec), ms(feat)
-            client = t - d - f if None not in (t, d, f) else None
+            if read_calls_getfeatures:
+                client = t - d - f if None not in (t, d, f) else None
+            else:
+                client = t - d if None not in (t, d) else None
             w, h = DIMS[size]
             server = decode_time.get(f"{size}_{w}x{h}_{FILE_MODES[mode]}.webp")
             transfer = d - server if None not in (d, server) else None
@@ -297,9 +306,12 @@ def conversion_section(rows) -> list[str]:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        raise SystemExit("usage: summarize.py <results-dir>")
-    results = Path(sys.argv[1])
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    flags = {a for a in sys.argv[1:] if a.startswith("--")}
+    if len(args) != 1 or not flags <= {"--read-calls-getfeatures"}:
+        raise SystemExit("usage: summarize.py <results-dir> [--read-calls-getfeatures]")
+    results = Path(args[0])
+    read_calls_getfeatures = "--read-calls-getfeatures" in flags
     rows = load(results)
     if not rows:
         raise SystemExit(f"no JMH results in {results}")
@@ -313,7 +325,7 @@ def main() -> None:
     lines = ["# Phase 4 벤치마크 요약", "", f"결과: `{results.name}` ({len(rows)}개 측정). 환경: `environment.txt`.", ""]
     for section in (decode_section, servers_section, chunk_section):
         lines += section(rows)
-    lines += breakdown_section(rows, load_decode_time(results, "sse2"))
+    lines += breakdown_section(rows, load_decode_time(results, "sse2"), read_calls_getfeatures)
     lines += server_decode_section(load_decode_time(results, "sse2"), load_decode_time(results, "avx2"))
     for section in (conversion_section, wasm_interp_section, encode_section, animation_section):
         lines += section(rows)
