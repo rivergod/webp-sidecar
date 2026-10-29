@@ -74,7 +74,7 @@ cleanup() {
 trap cleanup EXIT
 
 # start_server <이름> <이미지> [docker run 옵션...]
-# 격리 옵션은 deploy/README.md와 같다(read-only, cap-drop ALL, no-new-privileges, 메모리 1 GiB, CPU 2).
+# 격리 옵션은 deploy/README.md와 같다(read-only, cap-drop ALL, no-new-privileges, seccomp, 메모리 1 GiB, CPU 2).
 start_server() {
   local name=$1 image=$2
   shift 2
@@ -83,6 +83,7 @@ start_server() {
   local cname="wpb-$name-$$"
   docker run -d --rm --name "$cname" --user "$(id -u):$(id -g)" \
     --read-only --cap-drop ALL --security-opt no-new-privileges \
+    --security-opt "seccomp=$ROOT/deploy/seccomp/webp-imageio-server.json" \
     --memory 1g --memory-swap 1g --cpus 2 --cpuset-cpus "$SERVER_CPUS" \
     -v "$dir:/run/webp-imageio" "$@" "$image" >/dev/null
   CONTAINERS+=("$cname")

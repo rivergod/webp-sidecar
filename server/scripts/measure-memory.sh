@@ -14,6 +14,7 @@ cargo test --release --test memory_budget --no-run >/dev/null 2>&1
 for OP in ${OPS:-decode-lossless decode-lossy encode-lossless encode-lossy decode-anim encode-anim}; do
   docker rm -f webp-mem >/dev/null 2>&1 || true
   docker run -d --name webp-mem --read-only --network none --cap-drop ALL --security-opt no-new-privileges \
+    --security-opt "seccomp=$(cd "$(dirname "$0")/../.." && pwd)/deploy/seccomp/webp-imageio-server.json" \
     --memory "$MEM" --memory-swap "$MEM" --cpus 2 --user "$(id -u):$(id -g)" \
     -e WEBP_SERVER_MAX_CONCURRENCY="$CONCURRENT" -v "$SOCKDIR:/run/webp-imageio" webp-imageio-server:dev >/dev/null
   sleep 1

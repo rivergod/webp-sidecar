@@ -1,0 +1,76 @@
+{
+  "defaultAction": "SCMP_ACT_ERRNO",
+  "defaultErrnoRet": 1,
+  "architectures": [
+    "SCMP_ARCH_X86_64"
+  ],
+  "syscalls": [
+    {
+      "comment": "webp-imageio-server (musl 정적 바이너리). 수집: strace + 통합 테스트 LOG 모드, deploy/README.md 'seccomp 프로파일'",
+      "names": [
+        "accept4",
+        "arch_prctl",
+        "bind",
+        "brk",
+        "chmod",
+        "clone",
+        "close",
+        "epoll_create1",
+        "epoll_ctl",
+        "epoll_pwait",
+        "eventfd2",
+        "execve",
+        "exit",
+        "exit_group",
+        "fcntl",
+        "fstat",
+        "futex",
+        "getpeername",
+        "getrandom",
+        "getsockname",
+        "getsockopt",
+        "gettid",
+        "ioctl",
+        "listen",
+        "lseek",
+        "lstat",
+        "mkdir",
+        "mmap",
+        "mprotect",
+        "munmap",
+        "open",
+        "poll",
+        "prctl",
+        "read",
+        "recvfrom",
+        "rt_sigaction",
+        "rt_sigprocmask",
+        "rt_sigreturn",
+        "sched_getaffinity",
+        "sendto",
+        "set_tid_address",
+        "setsockopt",
+        "shutdown",
+        "sigaltstack",
+        "socket",
+        "socketpair",
+        "stat",
+        "unlink",
+        "write",
+        "writev"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "comment": "runc 초기화: seccomp 적용 뒤, 서버 실행(execve) 전에 runc가 부른다(통합 테스트 LOG 모드에서 관찰)",
+      "names": [
+        "fstatfs",
+        "getdents64",
+        "openat",
+        "openat2",
+        "statx"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    }
+  ]
+}

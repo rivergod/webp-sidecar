@@ -15,7 +15,8 @@ services:
     read_only: true
     user: "65532:65532"
     cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
+    # seccomp 경로는 compose 파일 기준이다(미검증, 위 머리 주석 참고).
+    security_opt: ["no-new-privileges:true", "seccomp:./seccomp/webp-imageio-server.json"]
     mem_limit: 1g
     memswap_limit: 1g
     cpus: 2

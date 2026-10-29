@@ -99,7 +99,7 @@
 
 ### 5-1. 보안 검증
 
-- [ ] 서버 seccomp 프로파일을 만들고, 적용 상태에서 전체 통합 테스트가 통과한다.
+- [x] 서버 seccomp 프로파일을 만들고, 적용 상태에서 전체 통합 테스트가 통과한다. — [deploy/seccomp/webp-imageio-server.json](../deploy/seccomp/webp-imageio-server.json)(허용 55개, 기본 EPERM, x86_64). client-jvm 통합 테스트·벤치 검증·스모크 테스트가 기본으로 적용한다. 만드는 법: [deploy/README.md](../deploy/README.md) "seccomp 프로파일"
 - [ ] 컨테이너 제한(메모리/CPU, read-only, 네트워크 차단, non-root)이 실제로 적용됐는지 검증한다.
 - [ ] 서버 입력 경로(Decode, GetFeatures, DecodeAnimation) 퍼저를 만들고 실행 결과(시간, 발견 사항)를 기록한다.
 - [ ] 출력량 폭탄 대응을 정한다: 4096² 캔버스 × 1,000프레임 파일은 기본 상한을 모두 통과하지만 합성 출력이 약 64 GiB다(research/0005). 총 출력 픽셀 상한 같은 방안을 ADR로 제안한다.
