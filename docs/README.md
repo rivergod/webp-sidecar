@@ -90,6 +90,8 @@ docs/
 - [research/0010-server-fuzzing.md](research/0010-server-fuzzing.md) — 서버 입력 경로 퍼징(libFuzzer + ASan) 결과
 - [research/0011-phase5-performance.md](research/0011-phase5-performance.md) — Phase 5-2 성능 보강과 ADR-0011 재판정
 - [research/0012-gif-conversion-load.md](research/0012-gif-conversion-load.md) — GIF → WebP 변환 단건·동시 부하, HTTP/2 흐름 제어 교착 발견
+- [research/0013-alpha-decode-gap.md](research/0013-alpha-decode-gap.md) — 사진 alpha 디코딩 격차의 원인(libwebp 1.6.0 `DispatchAlpha_SSE2`, musl 할당자)
+- [research/0014-load-soak.md](research/0014-load-soak.md) — 첫 호출 지연, 할당량, 연결 수, 60분 섞인 부하와 서버 메모리
 
 ### 작업 규칙
 

@@ -83,6 +83,7 @@ Phase 4와 같다(ADR-0015, [research/0009](0009-benchmark-results.md) "측정 �
   - AVX2 빌드로도 그대로다(AVX2/SSE2 시간 0.98–1.01, `decode-time-avx2.tsv`).
   - lossy만 쓴 경우(2.73 ms)와 비교하면 alpha 평면 디코딩과 합성에 약 2.9 ms가 더 든다.
   - 같은 일을 JNI(libwebp 1.3.2)는 훨씬 짧게 하는 것으로 보인다. 원인(버전 차이, 출력 경로)은 확인하지 않았다(미확인).
+  - 후속 조사(2026-10-30): 원인은 libwebp 1.6.0의 `DispatchAlpha_SSE2` 변경과 musl 할당자 둘이다. [research/0013](0013-alpha-decode-gap.md)
 
 ## Phase 5-3(proto 회고)에 넘길 것
 
