@@ -27,6 +27,8 @@ dependencies {
     implementation(libs.grpc.protobuf)
     implementation(libs.grpc.stub)
     implementation(libs.protobuf.java)
+    // module-info가 requires한다(module path에서 TCP + HTTP 프록시). grpc-netty가 런타임에 이미 가져오는 같은 버전이다.
+    implementation(libs.netty.handler.proxy)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
@@ -124,6 +126,8 @@ tasks.withType<Test>().configureEach {
 
 tasks.test {
     useJUnitPlatform { excludeTags("integration", "poc", "poc-deny") }
+    // javadoc 생성이 깨지면 평소 테스트에서 바로 드러나게 한다(생성 코드 제외 설정이 깨진 적이 있다).
+    dependsOn(tasks.named("javadoc"))
 }
 
 val serverImage = providers.gradleProperty("webpServerImage").orElse("webp-imageio-server:dev")
