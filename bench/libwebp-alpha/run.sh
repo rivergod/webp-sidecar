@@ -11,7 +11,7 @@
 #   server-build.tsv  서버 빌드(libwebp-sys 0.14.4 = libwebp 1.6.0): {musl, glibc} × {sse2(기본), avx2(sse4.1 포함)}.
 #                     server/examples/decode_time.rs, 출력 버퍼 재사용(서버 Decode와 같은 경로)
 #   c-harness.tsv     공식 빌드(CMake Release, 정적, glibc, SIMD 런타임 선택): libwebp {1.3.2, 1.6.0} × 출력 방식 ×
-#                     스레드 {0, 1}. alpha_decode.c
+#                     스레드 {0, 1}, 그리고 사이 릴리스 {1.4.0, 1.5.0}의 rgba·yuv(어느 릴리스에서 바뀌었는지). alpha_decode.c
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
@@ -71,8 +71,10 @@ c_run() { # c_run <버전> <모드> <스레드> <into|alloc>
   docker run --rm --network none --cpuset-cpus "$cpus" -v "$ROOT/$PHOTO:/in:ro" "$IMAGE" \
     "alpha_decode-$1" "$N" "$2" "$3" "$4" "${inputs[@]}" | tail -n +2 >>"$out"
 }
-for v in 1.3.2 1.6.0; do
-  for mode in rgba bgra argb rgbA; do
+for v in 1.3.2 1.4.0 1.5.0 1.6.0; do
+  c_run "$v" rgba 0 into
+  case "$v" in 1.4.0 | 1.5.0) log "c-harness $v rgba, yuv"; c_run "$v" yuv 0 alloc; continue ;; esac
+  for mode in bgra argb rgbA; do
     log "c-harness $v $mode"
     c_run "$v" "$mode" 0 into
   done
