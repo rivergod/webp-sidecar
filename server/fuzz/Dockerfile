@@ -15,3 +15,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && rustc -vV | grep LLVM && clang-${LLVM_MAJOR} --version | head -1
 RUN cargo install cargo-fuzz --version 0.13.2 --locked
+# 커버리지 보고서(server/fuzz/coverage.sh): rustc와 같은 LLVM 버전의 llvm-profdata, llvm-cov.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends llvm-${LLVM_MAJOR} \
+ && rm -rf /var/lib/apt/lists/* \
+ && llvm-profdata-${LLVM_MAJOR} --version | head -2

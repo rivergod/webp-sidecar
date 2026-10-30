@@ -1,0 +1,8 @@
+alloc read_M_lossy reps=200 alloc_kib_per_op=6465 mean_ms=6.23
+alloc read_M_alpha reps=200 alloc_kib_per_op=6509 mean_ms=9.70
+alloc read_M_lossless reps=200 alloc_kib_per_op=12474 mean_ms=15.80
+alloc read_L_lossy reps=200 alloc_kib_per_op=16800 mean_ms=10.87
+alloc write_M_lossy reps=200 alloc_kib_per_op=3458 mean_ms=41.32
+alloc write_M_lossless reps=200 alloc_kib_per_op=8447 mean_ms=191.48
+alloc read_anim_all reps=200 alloc_kib_per_op=76215 mean_ms=68.71
+server_peak_mib=46 oom_killed=false running=true

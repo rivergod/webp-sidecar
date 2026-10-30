@@ -1,0 +1,1 @@
+minutes=60 jvms=3 threads=4 server_peak_mib=114 oom_killed=false running=true
