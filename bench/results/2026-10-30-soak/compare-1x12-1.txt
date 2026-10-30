@@ -1,0 +1,14 @@
+interval t_s=30 ops=1969 ops_per_s=65.63 errors={read_L_lossy:BUSY=3, read_M_lossy:BUSY=13, read_anim_all:BUSY=5, write_M_lossy:BUSY=8, write_M_lossless:BUSY=1, read_M_alpha:BUSY=14, read_M_lossless:BUSY=5}
+interval t_s=60 ops=3978 ops_per_s=66.96 errors={read_L_lossy:BUSY=7, read_M_lossy:BUSY=30, read_anim_all:BUSY=10, write_M_lossy:BUSY=20, write_M_lossless:BUSY=3, read_M_alpha:BUSY=21, read_M_lossless:BUSY=9}
+interval t_s=90 ops=5959 ops_per_s=66.03 errors={read_L_lossy:BUSY=14, read_M_lossy:BUSY=46, read_anim_all:BUSY=16, write_M_lossy:BUSY=26, write_M_lossless:BUSY=6, read_M_alpha:BUSY=30, read_M_lossless:BUSY=17}
+interval t_s=120 ops=7947 ops_per_s=66.27 errors={read_L_lossy:BUSY=16, read_M_lossy:BUSY=67, read_anim_all:BUSY=25, write_M_lossy:BUSY=34, write_M_lossless:BUSY=7, read_M_alpha:BUSY=36, read_M_lossless:BUSY=25}
+interval t_s=150 ops=9841 ops_per_s=63.13 errors={read_L_lossy:BUSY=23, read_M_lossy:BUSY=80, read_anim_all:BUSY=30, write_M_lossy:BUSY=41, write_M_lossless:BUSY=13, read_M_alpha:BUSY=44, read_M_lossless:BUSY=32}
+interval t_s=180 ops=11723 ops_per_s=62.73 errors={read_L_lossy:BUSY=29, read_M_lossy:BUSY=98, read_anim_all:BUSY=32, write_M_lossy:BUSY=52, write_M_lossless:BUSY=18, read_M_alpha:BUSY=49, read_M_lossless:BUSY=37}
+op read_M_lossy count=3577 p50_ms=104.41 p99_ms=420.96 max_ms=1031.70
+op read_M_alpha count=2413 p50_ms=107.09 p99_ms=433.86 max_ms=934.80
+op read_M_lossless count=1167 p50_ms=122.60 p99_ms=494.79 max_ms=892.77
+op read_L_lossy count=1154 p50_ms=115.21 p99_ms=452.56 max_ms=953.10
+op write_M_lossy count=1686 p50_ms=145.83 p99_ms=483.29 max_ms=985.42
+op write_M_lossless count=562 p50_ms=313.83 p99_ms=586.33 max_ms=1193.52
+op read_anim_all count=1176 p50_ms=281.66 p99_ms=671.99 max_ms=1196.45
+summary threads=12 elapsed_s=180.4 ops=11735 ops_per_s=65.06 errors={read_L_lossy:BUSY=29, read_M_lossy:BUSY=98, read_anim_all:BUSY=32, write_M_lossy:BUSY=52, write_M_lossless:BUSY=18, read_M_alpha:BUSY=49, read_M_lossless:BUSY=37} gc_count=653 gc_ms=635 gc_share=0.0035

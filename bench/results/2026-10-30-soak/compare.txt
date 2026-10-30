@@ -1,0 +1,2 @@
+jvms=1 threads=12 server_peak_mib=108 oom_killed=false running=true
+jvms=3 threads=4 server_peak_mib=103 oom_killed=false running=true

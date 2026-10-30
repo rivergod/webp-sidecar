@@ -1,0 +1,6 @@
+Oct 30, 2026 5:00:40 PM io.netty.bootstrap.AbstractBootstrap setChannelOption
+WARNING: Unknown channel option 'SO_KEEPALIVE' for channel '[id: 0xa83324af]' of type 'class io.netty.channel.socket.nio.NioDomainSocketChannel'
+Oct 30, 2026 5:22:53 PM io.netty.handler.codec.http2.DefaultHttp2ConnectionDecoder$FrameReadListener shouldIgnoreHeadersOrDataFrame
+INFO: [id: 0xa83324af, L: - R:/tmp/wps.J3nW/webp.sock] ignoring HEADERS frame for stream RST_STREAM sent.
+Oct 30, 2026 5:42:28 PM io.netty.handler.codec.http2.DefaultHttp2ConnectionDecoder$FrameReadListener shouldIgnoreHeadersOrDataFrame
+INFO: [id: 0xa83324af, L: - R:/tmp/wps.J3nW/webp.sock] ignoring HEADERS frame for stream RST_STREAM sent.

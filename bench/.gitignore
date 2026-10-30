@@ -3,3 +3,8 @@ results/**/*.json
 results/**/*.txt
 !results/**/environment*.txt
 !results/**/load*.txt
+# bench/soak.sh 출력은 요약 줄만 담은 작은 결과 표다(docs/research/0014).
+!results/**/first-call*.txt
+!results/**/alloc*.txt
+!results/**/compare*.txt
+!results/**/soak*.txt
