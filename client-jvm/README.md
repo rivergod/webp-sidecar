@@ -21,6 +21,7 @@ ImageIO `ImageReaderSpi` / `ImageWriterSpi` 구현체(gRPC 클라이언트). `Im
 | 작업 | 명령(저장소 루트) |
 |---|---|
 | 단위 테스트 | `./gradlew :client-jvm:test` |
+| 공개 API 문서(javadoc, 생성된 proto 코드 제외) | `./gradlew :client-jvm:javadoc` → `client-jvm/build/docs/javadoc` |
 | 통합 테스트(Docker 필요) | `./gradlew :client-jvm:integrationTest` |
 | JDK 17/21/25/27 매트릭스 | `./gradlew :client-jvm:testMatrix` |
 | Spring Boot 4.1 관리 버전(grpc-java 1.84.1)으로 | `./gradlew :client-jvm:test :client-jvm:integrationTest -PbootCompat` |

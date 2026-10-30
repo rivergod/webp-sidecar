@@ -101,8 +101,15 @@ tasks.named<JavaCompile>("compileJava") {
     )
 }
 
-tasks.withType<Javadoc>().configureEach {
+tasks.named<Javadoc>("javadoc") {
+    // 생성된 proto/gRPC 코드는 공개 API가 아니다(ADR-0013, module-info에서 export하지 않는다). 문서에서 빼되, 손으로 쓴
+    // 코드가 그 클래스를 참조하므로 컴파일된 클래스를 같은 모듈에 덧대어(--patch-module) 이름만 풀게 한다.
     exclude("net/rivergod/webp/imageio/proto/**")
+    val mainClasses = sourceSets.main.get().output.classesDirs
+    inputs.files(mainClasses)
+    (options as StandardJavadocDocletOptions).addStringOption(
+        "-patch-module", "net.rivergod.webp.imageio=" + mainClasses.asPath,
+    )
 }
 
 // --- 테스트 ---
