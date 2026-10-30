@@ -1,0 +1,9 @@
+build	file	minor_faults_per_decode	mmap_per_decode	munmap_per_decode
+musl-sse2	M_1024x768_lossy_q75.webp	29	2	2
+musl-sse2	M_1024x768_lossy_alpha_q75.webp	1219	12	12
+musl-sse2	L_1920x1080_lossy_q75.webp	53	2	2
+musl-sse2	L_1920x1080_lossy_alpha_q75.webp	3129	12	12
+glibc-sse2	M_1024x768_lossy_q75.webp	1	0	0
+glibc-sse2	M_1024x768_lossy_alpha_q75.webp	0	0	0
+glibc-sse2	L_1920x1080_lossy_q75.webp	0	0	0
+glibc-sse2	L_1920x1080_lossy_alpha_q75.webp	0	0	0
