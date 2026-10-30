@@ -195,7 +195,7 @@ sequenceDiagram
 
 ## 5. 클라이언트 설정
 
-SPI는 ImageIO가 인자 없는 생성자로 만든다. 그래서 기본 설정 경로는 시스템 프로퍼티와 환경변수다. 코드로도 줄 수 있다([ADR-0020](../adr/0020-imageio-config-injection.md), proposed). 항목마다 아래 순서로 처음 정해진 값을 쓴다.
+SPI는 ImageIO가 인자 없는 생성자로 만든다. 그래서 기본 설정 경로는 시스템 프로퍼티와 환경변수다. 코드로도 줄 수 있다([ADR-0020](../adr/0020-imageio-config-injection.md)). 항목마다 아래 순서로 처음 정해진 값을 쓴다.
 
 1. 리더·writer 단위: `createReaderInstance(WebPClientConfig)` / `createWriterInstance(WebPClientConfig)`
 2. 등록 단위: `WebPImageReaderSpi(WebPClientConfig)` / `WebPImageWriterSpi(WebPClientConfig)`를 수동 등록. 레지스트리는 클래스마다 하나만 두므로 자동 등록된 SPI를 대체하고, JVM에 하나뿐이다
