@@ -117,4 +117,5 @@
 ### 5-3. proto 회고
 
 - [x] proto 회고 ADR(계속/중단 판단과 근거)을 `proposed`로 작성한다. — [ADR-0019](adr/0019-prototype-retrospective.md): **사이드카 구조로 확정**(accepted, 결정자 2026-10-29). 16/18 충족, 남은 alpha 격차는 서버 안 libwebp 쪽이라 후속 조사. `webp.v1` 유지(필드 추가만). 입력: Phase 4 판정, 5-1 보안 검증 결과, 5-2 재판정, proto 변경 안건(픽셀 포맷, 총 출력 픽셀 상한, GetFeatures/Decode 중복). 계속/중단 결정은 결정자가 한다.
-- [x] ImageIO 설정 주입(공개 설정 타입, SPI 수동 등록, ReadParam/WriteParam) ADR을 `proposed`로 작성한다. — [ADR-0020](adr/0020-imageio-config-injection.md)(proposed)
+- [x] ImageIO 설정 주입(공개 설정 타입, SPI 수동 등록, ReadParam/WriteParam) ADR을 `proposed`로 작성한다. — [ADR-0020](adr/0020-imageio-config-injection.md)(accepted 2026-10-30). 개정(2026-10-30): lossless `exact` 제외, "server busy" 재시도(기본 끔) 추가, 등록 단위 설정은 JVM에 하나임을 확인
+- [x] ADR-0020 구현과 테스트. — `WebPClientConfig`, `WebPReadParam`, 공개 `WebPWriteParam`, SPI 설정 생성자, server busy 재시도. 가짜 서버 단위 테스트(재시도, 파라미터, classpath·module path 수동 등록)와 서버 두 개 통합 테스트, JDK 17/21/25/27 통과. 시험 중 module path RPC 실패(netty HTTP/2 모듈 미해석)를 찾아 고쳤다

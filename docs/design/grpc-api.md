@@ -195,16 +195,30 @@ sequenceDiagram
 
 ## 5. 클라이언트 설정
 
-SPI는 인자 없는 생성자로 전역 등록되므로 설정을 주입할 수 없다. 각 값은 **시스템 프로퍼티 → 환경변수 → 기본값** 순서로 해석한다.
+SPI는 ImageIO가 인자 없는 생성자로 만든다. 그래서 기본 설정 경로는 시스템 프로퍼티와 환경변수다. 코드로도 줄 수 있다([ADR-0020](../adr/0020-imageio-config-injection.md)). 항목마다 아래 순서로 처음 정해진 값을 쓴다.
 
-| 설정 | 시스템 프로퍼티 | 환경변수 | 기본값 (초안) |
-|---|---|---|---|
-| 엔드포인트 (gRPC target) | `webp.imageio.endpoint` | `WEBP_IMAGEIO_ENDPOINT` | `unix:///run/webp-imageio/webp.sock` |
-| 호출 데드라인 | `webp.imageio.deadline-ms` | `WEBP_IMAGEIO_DEADLINE_MS` | `30000` |
-| 클라이언트 픽셀 상한 | `webp.imageio.max-pixels` | `WEBP_IMAGEIO_MAX_PIXELS` | 없음 (서버 상한만 적용) |
+1. 리더·writer 단위: `createReaderInstance(WebPClientConfig)` / `createWriterInstance(WebPClientConfig)`
+2. 등록 단위: `WebPImageReaderSpi(WebPClientConfig)` / `WebPImageWriterSpi(WebPClientConfig)`를 수동 등록. 레지스트리는 클래스마다 하나만 두므로 자동 등록된 SPI를 대체하고, JVM에 하나뿐이다
+3. 시스템 프로퍼티
+4. 환경변수
+5. 기본값
+
+| 설정 | `WebPClientConfig` | 시스템 프로퍼티 | 환경변수 | 기본값 (초안) |
+|---|---|---|---|---|
+| 엔드포인트 (gRPC target) | `endpoint` | `webp.imageio.endpoint` | `WEBP_IMAGEIO_ENDPOINT` | `unix:///run/webp-imageio/webp.sock` |
+| 호출 데드라인(혼잡 재시도 포함) | `deadlineMs` | `webp.imageio.deadline-ms` | `WEBP_IMAGEIO_DEADLINE_MS` | `30000` |
+| 클라이언트 픽셀 상한 | `maxPixels` | `webp.imageio.max-pixels` | `WEBP_IMAGEIO_MAX_PIXELS` | 없음 (서버 상한만 적용) |
+| 혼잡 재시도 횟수 | `busyRetries` | `webp.imageio.busy-retries` | `WEBP_IMAGEIO_BUSY_RETRIES` | `0`(끔), 최대 10 |
 
 - 엔드포인트는 gRPC target 문자열이다. UDS는 `unix:///절대/경로`, TCP는 `dns:///host:port` 또는 `host:port`.
 - 기본 엔드포인트와 Windows 개발 환경 처리는 ADR-0003을 따른다.
+- **호출 단위**: `WebPReadParam`(리더의 `getDefaultReadParam()`)으로 그 읽기의 데드라인과 클라이언트 픽셀 상한을 바꾼다. `WebPWriteParam`(writer의 `getDefaultWriteParam()`)은 표준 압축 항목에 더해 `EncodeParams.method`(0–6)를 넘긴다.
+- **혼잡 재시도**(`busyRetries` ≥ 1): `UNAVAILABLE`이고 메시지가 "server busy"로 시작하는 거부(§3.2, 서버가 일을 시작하기 전)만 다시 보낸다.
+  - 대상: GetFeatures, Decode, DecodeAnimation 시작, Encode.
+  - 물러섬: 100 ms에서 두 배씩, 최대 1,600 ms.
+  - 시도와 물러섬을 합쳐 호출 데드라인 안이다. 남은 시간이 다음 물러섬보다 짧으면 멈춘다.
+  - EncodeAnimation은 프레임을 받는 대로 보내므로 다시 시도하지 않는다.
+  - 접속 불가, 메모리 예산 소진(§3.3, 일하던 중의 실패), 데드라인 초과도 다시 시도하지 않는다.
 
 ## 6. 언어별 생성 옵션
 

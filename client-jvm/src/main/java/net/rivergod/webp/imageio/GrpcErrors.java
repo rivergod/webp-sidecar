@@ -9,7 +9,21 @@ import javax.imageio.IIOException;
  */
 final class GrpcErrors {
 
+    /** ADR-0017 대기 상한 거부 메시지의 머리. */
+    private static final String SERVER_BUSY = "server busy";
+
     private GrpcErrors() {}
+
+    /**
+     * ADR-0017 대기 상한 거부({@code UNAVAILABLE} "server busy")인지. 서버가 일을 시작하기 전의 거부라 같은 요청을 다시
+     * 보내도 안전하다(ADR-0020 혼잡 재시도). cause 사슬도 본다.
+     */
+    static boolean isServerBusy(Throwable error) {
+        Status status = Status.fromThrowable(error);
+        return status.getCode() == Status.Code.UNAVAILABLE
+                && status.getDescription() != null
+                && status.getDescription().startsWith(SERVER_BUSY);
+    }
 
     /**
      * 실패한 호출을 IIOException으로 바꾼다.
@@ -27,7 +41,7 @@ final class GrpcErrors {
         String description = status.getDescription() == null ? "" : status.getDescription();
         String message = switch (status.getCode()) {
             // ADR-0017: 서버 대기 상한을 넘은 거부는 접속 불가와 구분한다(잠시 뒤 다시 시도할 수 있다).
-            case UNAVAILABLE -> description.startsWith("server busy")
+            case UNAVAILABLE -> description.startsWith(SERVER_BUSY)
                     ? "WebP server busy (" + config.endpoint() + ")" + detail
                     : "WebP server unavailable (" + config.endpoint() + ")" + detail;
             // ADR-0017: 서버 쪽 요청 시간 상한과 클라이언트 데드라인을 구분한다.

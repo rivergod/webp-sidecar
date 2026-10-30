@@ -2,6 +2,7 @@ package net.rivergod.webp.imageio;
 
 import java.io.IOException;
 import java.util.Locale;
+import java.util.Objects;
 import javax.imageio.ImageReader;
 import javax.imageio.spi.ImageReaderSpi;
 import javax.imageio.stream.ImageInputStream;
@@ -10,11 +11,12 @@ import javax.imageio.stream.ImageInputStream;
  * WebP {@link ImageReaderSpi}. 디코딩은 libwebp gRPC 사이드카 서버가 한다(ADR-0001). JNI를 쓰지 않는다.
  *
  * <p>서버 엔드포인트와 데드라인은 시스템 프로퍼티 {@code webp.imageio.endpoint}, {@code webp.imageio.deadline-ms},
- * {@code webp.imageio.max-pixels}(또는 같은 이름의 환경변수 {@code WEBP_IMAGEIO_*})로 정한다. 기본 엔드포인트는
- * {@code unix:///run/webp-imageio/webp.sock}이다.
+ * {@code webp.imageio.max-pixels}, {@code webp.imageio.busy-retries}(또는 같은 이름의 환경변수 {@code WEBP_IMAGEIO_*})로
+ * 정한다. 기본 엔드포인트는 {@code unix:///run/webp-imageio/webp.sock}이다.
  *
  * <p>ImageIO 레지스트리가 classpath({@code META-INF/services}) 또는 module path({@code module-info}의
- * {@code provides})에서 찾아 등록한다. 스레드 안전하다.
+ * {@code provides})에서 찾아 등록한다. 코드로 설정을 주려면 {@link #WebPImageReaderSpi(WebPClientConfig)}로 만들어
+ * 수동 등록하거나, {@link #createReaderInstance(Object)}에 {@link WebPClientConfig}를 넘긴다(ADR-0020). 스레드 안전하다.
  */
 public final class WebPImageReaderSpi extends ImageReaderSpi {
 
@@ -24,12 +26,32 @@ public final class WebPImageReaderSpi extends ImageReaderSpi {
     static final String[] SUFFIXES = {"webp"};
     static final String[] MIME_TYPES = {"image/webp"};
 
-    /** ImageIO 레지스트리가 인자 없이 만든다. */
+    private final WebPClientConfig config;
+
+    /** ImageIO 레지스트리가 인자 없이 만든다. 설정은 시스템 프로퍼티 → 환경변수 → 기본값이다. */
     public WebPImageReaderSpi() {
+        this(WebPClientConfig.EMPTY);
+    }
+
+    /**
+     * 등록 단위 설정을 가진 SPI를 만든다(ADR-0020). 비운 항목은 시스템 프로퍼티 → 환경변수 → 기본값으로 채운다.
+     * {@code IIORegistry.getDefaultInstance().registerServiceProvider(spi)}로 등록하면 자동 등록된 SPI를 대체한다
+     * (레지스트리는 클래스마다 하나만 둔다).
+     *
+     * @param config 이 SPI가 만드는 리더의 설정
+     * @throws NullPointerException {@code config}가 null이면
+     */
+    public WebPImageReaderSpi(WebPClientConfig config) {
         super(VENDOR, VERSION, NAMES, SUFFIXES, MIME_TYPES, "net.rivergod.webp.imageio.WebPImageReader",
                 new Class<?>[] {ImageInputStream.class}, new String[] {WebPImageWriterSpi.class.getName()},
                 false, WebPStreamMetadataFormat.NATIVE_FORMAT_NAME, WebPStreamMetadataFormat.class.getName(), null, null,
                 true, WebPStreamMetadataFormat.NATIVE_FORMAT_NAME, WebPImageMetadataFormat.class.getName(), null, null);
+        this.config = Objects.requireNonNull(config, "config");
+    }
+
+    /** 등록 단위 설정. */
+    WebPClientConfig config() {
+        return config;
     }
 
     /**
@@ -66,12 +88,14 @@ public final class WebPImageReaderSpi extends ImageReaderSpi {
     /**
      * 새 리더를 만든다. 리더는 스레드 안전하지 않다(ImageIO 규약).
      *
-     * @param extension 쓰지 않는다
+     * @param extension {@link WebPClientConfig}면 그 리더의 설정으로 쓰고, 비운 항목은 이 SPI의 설정에서 채운다(ADR-0020).
+     *     다른 값이나 null({@code ImageIO.read}가 넘기는 값)이면 이 SPI의 설정만 쓴다
      * @return 새 {@link ImageReader}
      */
     @Override
     public ImageReader createReaderInstance(Object extension) {
-        return new WebPImageReader(this);
+        WebPClientConfig readerConfig = extension instanceof WebPClientConfig c ? c.orElse(config) : config;
+        return new WebPImageReader(this, readerConfig);
     }
 
     /**

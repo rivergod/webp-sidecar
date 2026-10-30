@@ -27,10 +27,11 @@ import net.rivergod.webp.imageio.proto.v1.PixelFormat;
 /**
  * WebP {@link ImageWriter}. 이미지를 RGBA8 조각으로 바꿔 Encode(정지 이미지) 또는 EncodeAnimation(시퀀스 쓰기)으로
  * 보내고, 결과 WebP 파일을 출력 스트림에 쓴다. ICC/EXIF/XMP는 스트림 메타데이터에서 넣는다(ADR-0014).
- * ImageIO 규약대로 스레드 안전하지 않다.
+ * 설정은 만들 때 받은 {@link WebPClientConfig}를 먼저 쓴다(ADR-0020). ImageIO 규약대로 스레드 안전하지 않다.
  */
 final class WebPImageWriter extends ImageWriter {
 
+    private final WebPClientConfig config;
     private WebPClient client;
 
     // 시퀀스 쓰기 상태(prepareWriteSequence → writeToSequence × N → endWriteSequence).
@@ -40,13 +41,19 @@ final class WebPImageWriter extends ImageWriter {
     private int canvasWidth;
     private int canvasHeight;
 
-    WebPImageWriter(ImageWriterSpi spi) {
+    WebPImageWriter(ImageWriterSpi spi, WebPClientConfig config) {
         super(spi);
+        this.config = config;
+    }
+
+    /** 이 writer의 코드 설정(writer 단위 → SPI 단위를 합친 것). */
+    WebPClientConfig config() {
+        return config;
     }
 
     private WebPClient client() throws IIOException {
         if (client == null) {
-            client = WebPClient.fromEnvironment();
+            client = WebPClient.of(config);
         }
         return client;
     }
@@ -113,7 +120,8 @@ final class WebPImageWriter extends ImageWriter {
                 .build();
         Output output = new Output(out);
         try {
-            client().encode(options, rgbaChunks(source), output);
+            // 혼잡 재시도(ADR-0020) 때는 조각을 처음부터 다시 만든다.
+            client().encode(options, () -> rgbaChunks(source), output);
         } catch (IIOException e) {
             if (abortRequested()) {
                 processWriteAborted();

@@ -3,6 +3,7 @@ package net.rivergod.webp.imageio;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Locale;
@@ -59,5 +60,40 @@ class WebPWriteParamTest {
 
         // when / then
         assertFalse(p.isCompressionLossless());
+    }
+
+    @Test
+    void toEncodeParams_methodSetInDefaultMode_passesMethodOnly() {
+        // given: method는 압축 모드와 상관없이 넘긴다(ADR-0020)
+        WebPWriteParam p = new WebPWriteParam(Locale.ROOT);
+        p.setMethod(6);
+
+        // when
+        EncodeParams e = WebPWriteParam.toEncodeParams(p);
+
+        // then
+        assertEquals(6, e.getMethod());
+        assertFalse(e.hasQuality());
+    }
+
+    @Test
+    void toEncodeParams_methodUnset_leavesServerDefault() {
+        // given
+        WebPWriteParam p = new WebPWriteParam(Locale.ROOT);
+
+        // when
+        EncodeParams e = WebPWriteParam.toEncodeParams(p);
+
+        // then
+        assertFalse(e.hasMethod());
+    }
+
+    @Test
+    void setMethod_outOfRange_isRejected() {
+        // given
+        WebPWriteParam p = new WebPWriteParam(Locale.ROOT);
+
+        // when / then
+        assertThrows(IllegalArgumentException.class, () -> p.setMethod(7));
     }
 }

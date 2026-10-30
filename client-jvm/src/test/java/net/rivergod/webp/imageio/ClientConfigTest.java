@@ -20,7 +20,7 @@ class ClientConfigTest {
         ClientConfig c = ClientConfig.resolve(of(Map.of()), of(Map.of()));
 
         // then
-        assertEquals(new ClientConfig("unix:///run/webp-imageio/webp.sock", 30_000, 0), c);
+        assertEquals(new ClientConfig("unix:///run/webp-imageio/webp.sock", 30_000, 0, 0), c);
     }
 
     @Test
@@ -57,5 +57,67 @@ class ClientConfigTest {
         // when / then
         assertThrows(IllegalArgumentException.class,
                 () -> ClientConfig.resolve(of(Map.of("webp.imageio.deadline-ms", "0")), of(Map.of())));
+    }
+
+    @Test
+    void resolve_codeConfigSet_winsOverSyspropAndEnv() {
+        // given
+        WebPClientConfig code = WebPClientConfig.builder().endpoint("code:1").deadlineMs(10).build();
+
+        // when
+        ClientConfig c = ClientConfig.resolve(code,
+                of(Map.of("webp.imageio.endpoint", "prop:1", "webp.imageio.deadline-ms", "20")),
+                of(Map.of("WEBP_IMAGEIO_ENDPOINT", "env:1")));
+
+        // then
+        assertEquals("code:1", c.endpoint());
+        assertEquals(10, c.deadlineMs());
+    }
+
+    @Test
+    void resolve_codeConfigItemUnset_fallsThroughToSysprop() {
+        // given: 엔드포인트만 코드로 정한다
+        WebPClientConfig code = WebPClientConfig.builder().endpoint("code:1").build();
+
+        // when
+        ClientConfig c = ClientConfig.resolve(code, of(Map.of("webp.imageio.max-pixels", "99")),
+                of(Map.of("WEBP_IMAGEIO_BUSY_RETRIES", "3")));
+
+        // then: 픽셀 상한은 프로퍼티, 재시도는 환경변수, 데드라인은 기본값
+        assertEquals(new ClientConfig("code:1", 30_000, 99, 3), c);
+    }
+
+    @Test
+    void resolve_busyRetriesOutOfRange_namesTheKey() {
+        // when
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> ClientConfig.resolve(of(Map.of("webp.imageio.busy-retries", "11")), of(Map.of())));
+
+        // then
+        assertTrue(e.getMessage().contains("webp.imageio.busy-retries"), e.getMessage());
+    }
+
+    @Test
+    void forCall_zeroArguments_keepConfiguredValues() {
+        // given
+        ClientConfig c = new ClientConfig("a:1", 1_000, 50, 2);
+
+        // when
+        ClientConfig call = c.forCall(0, 0);
+
+        // then
+        assertEquals(c, call);
+    }
+
+    @Test
+    void forCall_positiveArguments_replaceDeadlineAndMaxPixelsOnly() {
+        // given
+        ClientConfig c = new ClientConfig("a:1", 1_000, 50, 2);
+
+        // when
+        ClientConfig call = c.forCall(200, 7);
+
+        // then
+        assertEquals(new ClientConfig("a:1", 200, 7, 2), call);
     }
 }
