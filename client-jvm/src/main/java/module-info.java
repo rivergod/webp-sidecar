@@ -12,6 +12,9 @@ module net.rivergod.webp.imageio {
     requires io.grpc.stub;
     requires io.netty.common;
     requires io.netty.transport;
+    // grpc-netty는 자동 모듈이라 쓰는 netty 모듈을 requires로 알리지 않는다. netty는 명시 모듈이라 module path에서
+    // 누군가 requires하지 않으면 해석되지 않고, 첫 RPC가 NoClassDefFoundError(Http2Headers)로 실패한다.
+    requires io.netty.codec.http2;
 
     exports net.rivergod.webp.imageio;
 
