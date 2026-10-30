@@ -1,8 +1,8 @@
 # 0020. ImageIO 플러그인 설정을 코드로 넘기는 방법
 
-- 상태: proposed
+- 상태: accepted
 - 날짜: 2026-10-29
-- 결정자: -
+- 결정자: Ilkang Na
 - 관련 문서: [ADR-0013](0013-client-package-and-imageio-mapping.md)(클라이언트 패키지와 ImageIO 매핑), [ADR-0017](0017-output-volume-limits.md)(대기 상한, "server busy"), [ADR-0016](0016-memory-budget-admission.md)(메모리 예산), [docs/design/grpc-api.md](../design/grpc-api.md) §5(클라이언트 설정), [docs/roadmap.md](../roadmap.md) 5-3
 - 개정: 2026-10-30 — 결정자 검토를 반영했다.
   - lossless `exact`를 뺐다. proto `EncodeParams`에 없는 항목이라 proto와 서버를 함께 바꿔야 한다.
