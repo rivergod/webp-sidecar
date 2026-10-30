@@ -1,5 +1,6 @@
 package net.rivergod.webp.imageio;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -12,7 +13,7 @@ import org.junit.jupiter.api.Test;
 
 class GrpcErrorsTest {
 
-    private static final ClientConfig CONFIG = new ClientConfig("unix:///run/x.sock", 1234, 0);
+    private static final ClientConfig CONFIG = new ClientConfig("unix:///run/x.sock", 1234, 0, 0);
 
     @ParameterizedTest
     @CsvSource({
@@ -83,5 +84,34 @@ class GrpcErrorsTest {
 
         // then
         assertSame(original, e);
+    }
+
+    @Test
+    void isServerBusy_wrappedBusyStatus_isTrue() {
+        // given: 리더가 받는 형태(IIOException의 cause)
+        IIOException e = GrpcErrors.toIIOException(
+                Status.UNAVAILABLE.withDescription("server busy: 8 requests queued").asRuntimeException(), "Decode", CONFIG);
+
+        // when / then
+        assertTrue(GrpcErrors.isServerBusy(e));
+    }
+
+    @Test
+    void isServerBusy_otherUnavailable_isFalse() {
+        // given
+        StatusRuntimeException e = Status.UNAVAILABLE.withDescription("connection refused").asRuntimeException();
+
+        // when / then
+        assertFalse(GrpcErrors.isServerBusy(e));
+    }
+
+    @Test
+    void isServerBusy_resourceExhaustedMemoryBudget_isFalse() {
+        // given: ADR-0016 요청 중간 실패는 일하던 중이라 재시도 대상이 아니다
+        StatusRuntimeException e =
+                Status.RESOURCE_EXHAUSTED.withDescription("memory budget exhausted: ...").asRuntimeException();
+
+        // when / then
+        assertFalse(GrpcErrors.isServerBusy(e));
     }
 }

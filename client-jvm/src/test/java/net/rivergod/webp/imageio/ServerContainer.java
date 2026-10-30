@@ -51,9 +51,15 @@ final class ServerContainer extends GenericContainer<ServerContainer> {
 
     /** 짧은 /tmp 경로(AF_UNIX 경로 길이 한도)에 소켓 디렉터리를 만들고, 현재 사용자 uid:gid로 서버를 띄운다. */
     static ServerContainer startNew() throws Exception {
+        return startNew(java.util.Map.of());
+    }
+
+    /** {@link #startNew()}와 같고, 서버 설정 환경변수({@code WEBP_SERVER_*})를 더 준다. */
+    static ServerContainer startNew(java.util.Map<String, String> serverEnv) throws Exception {
         Path dir = Files.createTempDirectory(Path.of("/tmp"), "wpit");
         String uidGid = Files.getAttribute(dir, "unix:uid") + ":" + Files.getAttribute(dir, "unix:gid");
         ServerContainer c = new ServerContainer(dir, uidGid);
+        serverEnv.forEach(c::withEnv);
         c.start();
         Path socket = dir.resolve("webp.sock");
         for (int i = 0; i < 100 && !Files.exists(socket); i++) {

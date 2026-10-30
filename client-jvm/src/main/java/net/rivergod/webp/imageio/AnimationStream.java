@@ -29,13 +29,20 @@ final class AnimationStream implements ClientResponseObserver<DecodeAnimationReq
     private final BlockingQueue<Object> inbox = new LinkedBlockingQueue<>();
     private final Object readyLock = new Object();
     private final ClientConfig config;
+    private final long waitMs;
     private ClientCallStreamObserver<DecodeAnimationRequest> requests;
     private ImageFeatures features;
     private int nextFrame;
     private boolean closed;
 
-    AnimationStream(ClientConfig config) {
+    /**
+     * @param config 오류 메시지용 설정(엔드포인트, 호출 데드라인)
+     * @param deadlineMs 이 스트림의 데드라인(혼잡 재시도 뒤에는 남은 시간). 대기에는 여기에 여유를 더한 안전 상한을 쓴다.
+     *     단위: ms
+     */
+    AnimationStream(ClientConfig config, long deadlineMs) {
         this.config = config;
+        this.waitMs = deadlineMs + 5_000;
     }
 
     @Override
@@ -74,7 +81,7 @@ final class AnimationStream implements ClientResponseObserver<DecodeAnimationReq
             while (messages.hasNext()) {
                 synchronized (readyLock) {
                     while (!requests.isReady() && !(inbox.peek() instanceof Throwable)) {
-                        readyLock.wait(config.deadlineMs() + 5_000);
+                        readyLock.wait(waitMs);
                     }
                 }
                 if (inbox.peek() instanceof Throwable) {
@@ -138,7 +145,7 @@ final class AnimationStream implements ClientResponseObserver<DecodeAnimationReq
     private DecodeAnimationResponse take() throws IIOException {
         Object item;
         try {
-            item = inbox.poll(config.deadlineMs() + 5_000, TimeUnit.MILLISECONDS);
+            item = inbox.poll(waitMs, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             close();
             Thread.currentThread().interrupt();

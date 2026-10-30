@@ -36,18 +36,28 @@ import net.rivergod.webp.imageio.proto.v1.WebPServiceGrpc;
  * webp.v1 RPC를 동기 호출로 감싼다. 스트리밍 규칙은 docs/design/grpc-api.md §2를 따른다. 실패는 모두
  * {@link IIOException}으로 바꾼다({@link GrpcErrors}). 채널은 엔드포인트별로 공유하고, 인스턴스는 가볍다.
  * 한 인스턴스를 여러 스레드에서 써도 되지만 각 호출은 호출한 스레드를 막는다.
+ *
+ * <p>ADR-0020 혼잡 재시도: 설정의 {@code busyRetries}가 1 이상이면, 서버가 일을 시작하기 전에 "server busy"로 거부한
+ * GetFeatures·Decode·DecodeAnimation 시작·Encode를 물러섰다가 다시 부른다. 시도와 물러섬을 합쳐 호출 데드라인 안이다.
+ * EncodeAnimation은 프레임을 받는 대로 보내므로 다시 시도하지 않는다.
  */
 final class WebPClient {
 
     /** 클라이언트가 보내는 조각의 최대 크기. 서버 상한이 더 작으면 그 값을 쓴다. 단위: 바이트. (ADR-0003) */
     static final int DEFAULT_CHUNK_BYTES = 1024 * 1024;
 
+    /** 혼잡 재시도의 첫 물러섬. 다음부터 두 배씩 늘린다(ADR-0020). 단위: ms. */
+    static final long FIRST_BACKOFF_MS = 100;
+
+    /** 혼잡 재시도의 최대 물러섬(ADR-0020). 단위: ms. */
+    static final long MAX_BACKOFF_MS = 1_600;
+
     private static final ConcurrentMap<String, Limits> LIMITS = new ConcurrentHashMap<>();
 
     private final ClientConfig config;
     private final ManagedChannel channel;
 
-    private WebPClient(ClientConfig config) {
+    WebPClient(ClientConfig config) {
         this.config = config;
         this.channel = WebPChannels.forEndpoint(config.endpoint());
     }
@@ -58,8 +68,17 @@ final class WebPClient {
      * @throws IIOException 설정 값이 잘못됐으면
      */
     static WebPClient fromEnvironment() throws IIOException {
+        return of(WebPClientConfig.EMPTY);
+    }
+
+    /**
+     * 코드로 준 설정을 먼저 쓰고 나머지는 시스템 프로퍼티 → 환경변수 → 기본값으로 채운 클라이언트를 만든다(ADR-0020).
+     *
+     * @throws IIOException 시스템 프로퍼티·환경변수 값이 잘못됐으면
+     */
+    static WebPClient of(WebPClientConfig code) throws IIOException {
         try {
-            return new WebPClient(ClientConfig.fromEnvironment());
+            return new WebPClient(ClientConfig.of(code));
         } catch (IllegalArgumentException e) {
             throw new IIOException("Invalid WebP client configuration: " + e.getMessage(), e);
         }
@@ -69,8 +88,47 @@ final class WebPClient {
         return config;
     }
 
-    private WebPServiceGrpc.WebPServiceStub stub() {
-        return WebPServiceGrpc.newStub(channel).withDeadlineAfter(config.deadlineMs(), TimeUnit.MILLISECONDS);
+    /** 호출 하나의 데드라인·픽셀 상한(ADR-0020 {@link WebPReadParam})으로 바꾼 클라이언트. 0인 인자는 지금 값을 둔다. */
+    WebPClient forCall(long deadlineMs, long maxPixels) {
+        ClientConfig call = config.forCall(deadlineMs, maxPixels);
+        return call.equals(config) ? this : new WebPClient(call);
+    }
+
+    private WebPServiceGrpc.WebPServiceStub stub(long deadlineMs) {
+        return WebPServiceGrpc.newStub(channel).withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS);
+    }
+
+    /** 한 번의 시도. 인자는 이 시도의 데드라인(혼잡 재시도 뒤에는 남은 시간)이다. 단위: ms. */
+    @FunctionalInterface
+    private interface Attempt<T> {
+        T run(long deadlineMs) throws IIOException;
+    }
+
+    /**
+     * ADR-0020 혼잡 재시도. "server busy"(서버가 일을 시작하기 전의 거부)면 물러섰다가 다시 부른다. 횟수를 다 썼거나,
+     * 남은 시간이 다음 물러섬보다 짧거나, 다른 오류면 마지막 오류를 그대로 낸다.
+     */
+    private <T> T withBusyRetry(String rpc, Attempt<T> attempt) throws IIOException {
+        long end = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(config.deadlineMs());
+        long backoff = FIRST_BACKOFF_MS;
+        for (int retry = 0; ; retry++) {
+            long remaining = TimeUnit.NANOSECONDS.toMillis(end - System.nanoTime());
+            try {
+                return attempt.run(Math.max(1, remaining));
+            } catch (IIOException e) {
+                long left = TimeUnit.NANOSECONDS.toMillis(end - System.nanoTime());
+                if (retry >= config.busyRetries() || !GrpcErrors.isServerBusy(e) || left <= backoff) {
+                    throw e;
+                }
+                try {
+                    Thread.sleep(backoff);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new IIOException("Interrupted while retrying WebP " + rpc, ie);
+                }
+                backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
+            }
+        }
     }
 
     /** 서버 상한(GetInfo). 엔드포인트별로 한 번만 묻고 기억한다. */
@@ -104,10 +162,14 @@ final class WebPClient {
      * @throws IIOException 서버 불가, 손상 입력, 상한 초과 등
      */
     GetFeaturesResponse getFeatures(byte[] input, boolean includeMetadata) throws IIOException {
+        return withBusyRetry("GetFeatures", ms -> getFeaturesOnce(input, includeMetadata, ms));
+    }
+
+    private GetFeaturesResponse getFeaturesOnce(byte[] input, boolean includeMetadata, long deadlineMs)
+            throws IIOException {
         AtomicReference<GetFeaturesResponse> result = new AtomicReference<>();
-        StreamingCall<GetFeaturesRequest, GetFeaturesResponse> call =
-                new StreamingCall<>(result::set, config.deadlineMs());
-        stub().getFeatures(call);
+        StreamingCall<GetFeaturesRequest, GetFeaturesResponse> call = new StreamingCall<>(result::set, deadlineMs);
+        stub(deadlineMs).getFeatures(call);
         GetFeaturesRequest first = GetFeaturesRequest.newBuilder()
                 .setOptions(GetFeaturesOptions.newBuilder().setInputBytes(input.length).setIncludeMetadata(includeMetadata))
                 .build();
@@ -136,17 +198,26 @@ final class WebPClient {
      * @throws IIOException 서버 불가, 손상 입력, 상한 초과, 응답 검증 실패 등
      */
     void decode(byte[] input, DecodeOptions options, FrameReceiver receiver) throws IIOException {
+        // "server busy"는 응답을 보내기 전의 거부라 수신기는 아직 아무것도 받지 않았다. 그래서 같은 수신기로 다시 시도한다.
+        withBusyRetry("Decode", ms -> {
+            decodeOnce(input, options, receiver, ms);
+            return null;
+        });
+        receiver.finish();
+    }
+
+    private void decodeOnce(byte[] input, DecodeOptions options, FrameReceiver receiver, long deadlineMs)
+            throws IIOException {
         StreamingCall<DecodeRequest, DecodeResponse> call = new StreamingCall<>(response -> {
             switch (response.getPayloadCase()) {
                 case HEADER -> receiver.header(response.getHeader());
                 case PIXELS -> receiver.pixels(response.getPixels());
                 default -> throw new IIOException("WebP server sent a Decode response without payload");
             }
-        }, config.deadlineMs());
-        stub().decode(call);
+        }, deadlineMs);
+        stub(deadlineMs).decode(call);
         DecodeRequest first = DecodeRequest.newBuilder().setOptions(options.toBuilder().setInputBytes(input.length)).build();
         run(call, "Decode", first, chunksOf(input), b -> DecodeRequest.newBuilder().setWebpData(b).build());
-        receiver.finish();
     }
 
     /** Encode 결과를 받는 쪽. 헤더(전체 크기) 다음에 WebP 조각이 온다. gRPC 스레드에서 순서대로 불린다. */
@@ -158,22 +229,37 @@ final class WebPClient {
         void data(ByteString chunk) throws Exception;
     }
 
+    /** Encode에 보낼 RGBA8 조각을 처음부터 만든다. 혼잡 재시도 때 다시 부른다. */
+    @FunctionalInterface
+    interface PixelSource {
+        /** 위쪽 행부터 차례로 RGBA8 조각을 만드는 새 반복자. 서버가 받을 준비가 될 때마다 하나씩 꺼낸다. */
+        Iterator<ByteString> open() throws IIOException;
+    }
+
     /**
      * Encode: RGBA8 픽셀 조각을 보내고 WebP 파일을 받는다.
      *
      * @param options 크기, 픽셀 포맷, 품질 설정
-     * @param pixelChunks 위쪽 행부터 차례로 RGBA8 조각을 만든다. 서버가 받을 준비가 될 때마다 하나씩 꺼낸다
+     * @param pixels 픽셀 조각을 만드는 쪽. 혼잡 재시도 때 처음부터 다시 만든다
      * @throws IIOException 서버 불가, 잘못된 옵션, 상한 초과 등
      */
-    void encode(EncodeOptions options, Iterator<ByteString> pixelChunks, EncodedReceiver receiver) throws IIOException {
+    void encode(EncodeOptions options, PixelSource pixels, EncodedReceiver receiver) throws IIOException {
+        withBusyRetry("Encode", ms -> {
+            encodeOnce(options, pixels.open(), receiver, ms);
+            return null;
+        });
+    }
+
+    private void encodeOnce(EncodeOptions options, Iterator<ByteString> pixelChunks, EncodedReceiver receiver,
+            long deadlineMs) throws IIOException {
         StreamingCall<EncodeRequest, EncodeResponse> call = new StreamingCall<>(response -> {
             switch (response.getPayloadCase()) {
                 case HEADER -> receiver.header(response.getHeader());
                 case WEBP_DATA -> receiver.data(response.getWebpData());
                 default -> throw new IIOException("WebP server sent an Encode response without payload");
             }
-        }, config.deadlineMs());
-        stub().encode(call);
+        }, deadlineMs);
+        stub(deadlineMs).encode(call);
         EncodeRequest first = EncodeRequest.newBuilder().setOptions(options).build();
         run(call, "Encode", first, pixelChunks, b -> EncodeRequest.newBuilder().setPixels(b).build());
     }
@@ -185,8 +271,12 @@ final class WebPClient {
      * @throws IIOException 서버 불가, 손상 입력, 상한 초과 등
      */
     AnimationStream openDecodeAnimation(byte[] input, long maxPixels) throws IIOException {
-        AnimationStream stream = new AnimationStream(config);
-        stub().decodeAnimation(stream);
+        return withBusyRetry("DecodeAnimation", ms -> openDecodeAnimationOnce(input, maxPixels, ms));
+    }
+
+    private AnimationStream openDecodeAnimationOnce(byte[] input, long maxPixels, long deadlineMs) throws IIOException {
+        AnimationStream stream = new AnimationStream(config, deadlineMs);
+        stub(deadlineMs).decodeAnimation(stream);
         DecodeAnimationOptions.Builder options = DecodeAnimationOptions.newBuilder()
                 .setInputBytes(input.length)
                 .setPixelFormat(PixelFormat.PIXEL_FORMAT_RGBA8);
@@ -195,7 +285,7 @@ final class WebPClient {
         }
         Iterator<ByteString> chunks = chunksOf(input);
         DecodeAnimationRequest first = DecodeAnimationRequest.newBuilder().setOptions(options).build();
-        stream.start(new Iterator<>() {
+        Iterator<DecodeAnimationRequest> messages = new Iterator<>() {
             private boolean sentFirst;
 
             @Override
@@ -211,7 +301,13 @@ final class WebPClient {
                 }
                 return DecodeAnimationRequest.newBuilder().setWebpData(chunks.next()).build();
             }
-        });
+        };
+        try {
+            stream.start(messages);
+        } catch (IIOException e) {
+            stream.close();
+            throw e;
+        }
         return stream;
     }
 
@@ -282,7 +378,7 @@ final class WebPClient {
                 default -> throw new IIOException("WebP server sent an EncodeAnimation response without payload");
             }
         }, config.deadlineMs());
-        stub().encodeAnimation(call);
+        stub(config.deadlineMs()).encodeAnimation(call);
         AnimationUpload upload = new AnimationUpload(call);
         upload.open = true;
         upload.send(EncodeAnimationRequest.newBuilder().setOptions(options).build());

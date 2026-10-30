@@ -117,4 +117,5 @@
 ### 5-3. proto 회고
 
 - [x] proto 회고 ADR(계속/중단 판단과 근거)을 `proposed`로 작성한다. — [ADR-0019](adr/0019-prototype-retrospective.md): **사이드카 구조로 확정**(accepted, 결정자 2026-10-29). 16/18 충족, 남은 alpha 격차는 서버 안 libwebp 쪽이라 후속 조사. `webp.v1` 유지(필드 추가만). 입력: Phase 4 판정, 5-1 보안 검증 결과, 5-2 재판정, proto 변경 안건(픽셀 포맷, 총 출력 픽셀 상한, GetFeatures/Decode 중복). 계속/중단 결정은 결정자가 한다.
-- [x] ImageIO 설정 주입(공개 설정 타입, SPI 수동 등록, ReadParam/WriteParam) ADR을 `proposed`로 작성한다. — [ADR-0020](adr/0020-imageio-config-injection.md)(proposed)
+- [x] ImageIO 설정 주입(공개 설정 타입, SPI 수동 등록, ReadParam/WriteParam) ADR을 `proposed`로 작성한다. — [ADR-0020](adr/0020-imageio-config-injection.md)(proposed). 개정(2026-10-30): lossless `exact` 제외, "server busy" 재시도(기본 끔) 추가, 등록 단위 설정은 JVM에 하나임을 확인
+- [ ] ADR-0020 구현과 테스트(결정자 요청으로 확정 전에 시험 구현). — 브랜치 `feat/adr-0020-config-injection`. 확정되면 main에 병합한다

@@ -24,19 +24,37 @@ import net.rivergod.webp.imageio.proto.v1.PixelFormat;
 
 /**
  * WebP {@link ImageReader}. 입력 전체를 읽어 서버에 보내고, 크기·프레임·메타데이터는 GetFeatures, 픽셀은 Decode
- * (애니메이션 순차 읽기는 DecodeAnimation)로 받는다(docs/design/grpc-api.md, ADR-0014). ImageIO 규약대로 스레드
- * 안전하지 않다.
+ * (애니메이션 순차 읽기는 DecodeAnimation)로 받는다(docs/design/grpc-api.md, ADR-0014). 설정은 만들 때 받은
+ * {@link WebPClientConfig}를 먼저 쓰고, 읽기 한 번의 데드라인·픽셀 상한은 {@link WebPReadParam}으로 바꾼다(ADR-0020).
+ * ImageIO 규약대로 스레드 안전하지 않다.
  */
 final class WebPImageReader extends ImageReader {
 
+    private final WebPClientConfig config;
     private WebPClient client;
     private long streamStart;
     private byte[] data;
     private GetFeaturesResponse features;
     private AnimationStream cursor;
 
-    WebPImageReader(ImageReaderSpi spi) {
+    WebPImageReader(ImageReaderSpi spi, WebPClientConfig config) {
         super(spi);
+        this.config = config;
+    }
+
+    /** 이 리더의 코드 설정(리더 단위 → SPI 단위를 합친 것). 시스템 프로퍼티·환경변수는 첫 호출 때 채운다. */
+    WebPClientConfig config() {
+        return config;
+    }
+
+    /**
+     * 기본 읽기 파라미터. 표준 항목에 더해 데드라인과 클라이언트 픽셀 상한을 바꿀 수 있다(ADR-0020).
+     *
+     * @return 새 {@link WebPReadParam}
+     */
+    @Override
+    public ImageReadParam getDefaultReadParam() {
+        return new WebPReadParam();
     }
 
     @Override
@@ -69,9 +87,15 @@ final class WebPImageReader extends ImageReader {
 
     private WebPClient client() throws IIOException {
         if (client == null) {
-            client = WebPClient.fromEnvironment();
+            client = WebPClient.of(config);
         }
         return client;
+    }
+
+    /** ADR-0020: {@link WebPReadParam}의 데드라인·픽셀 상한을 이 읽기에만 쓴다. */
+    private WebPClient callClient(ImageReadParam param) throws IIOException {
+        WebPClient base = client();
+        return param instanceof WebPReadParam p ? base.forCall(p.getDeadlineMs(), p.getMaxPixels()) : base;
     }
 
     /** 입력 전체(서버 max_input_bytes 이하)를 한 번 읽어 기억한다. */
@@ -116,8 +140,13 @@ final class WebPImageReader extends ImageReader {
     }
 
     private GetFeaturesResponse response() throws IOException {
+        return response(client());
+    }
+
+    /** GetFeatures 결과를 한 번만 받아 기억한다. {@code read}는 그 읽기의 데드라인으로 부른다(ADR-0020). */
+    private GetFeaturesResponse response(WebPClient via) throws IOException {
         if (features == null) {
-            features = client().getFeatures(data(), !ignoreMetadata);
+            features = via.getFeatures(data(), !ignoreMetadata);
         }
         return features;
     }
@@ -189,17 +218,18 @@ final class WebPImageReader extends ImageReader {
         // 정지 이미지를 기본 파라미터로 처음 읽을 때는 GetFeatures 없이 Decode 하나만 부른다(입력도 한 번만 보낸다).
         // 크기와 alpha는 Decode 응답 헤더로 알고, 대상 이미지는 헤더 검증 뒤에 만든다. 애니메이션은 순차 스트림을
         // 써야 하므로(ADR-0014) 기존 경로로 간다. 애니메이션 여부는 파일 머리를 로컬에서 읽어 판단한다.
+        WebPClient call = callClient(param);
         if (features == null && imageIndex == 0 && isPlainParam(param) && isLocalStill(data())) {
-            return readStillWithoutFeatures();
+            return readStillWithoutFeatures(call);
         }
+        ImageFeatures f = response(call).getFeatures();
         checkIndex(imageIndex);
         if (param != null && (param.getSourceBands() != null || param.getDestinationBands() != null)) {
             throw new IllegalArgumentException("source/destination bands are not supported");
         }
-        ImageFeatures f = features();
         int width = f.getWidth();
         int height = f.getHeight();
-        checkPixelLimits(width, height);
+        checkPixelLimits(call, width, height);
 
         // 대상 이미지와 영역을 정한다. 기본 경우(영역·서브샘플링 없음, 표준 int 타입)면 대상 버퍼에 직접 쓴다.
         BufferedImage dest = getDestination(param, getImageTypes(imageIndex), width, height);
@@ -212,14 +242,14 @@ final class WebPImageReader extends ImageReader {
 
         clearAbortRequest();
         processImageStarted(imageIndex);
-        long maxPixels = client().config().maxPixels();
+        long maxPixels = call.config().maxPixels();
         ArgbFrameSink sink = new ArgbFrameSink(width, height, maxPixels, alpha, target);
         ProgressReceiver receiver = new ProgressReceiver(sink, imageIndex, (long) width * height * 4);
         try {
             if (f.getHasAnimation()) {
-                readAnimationFrame(imageIndex, receiver, maxPixels);
+                readAnimationFrame(call, imageIndex, receiver, maxPixels);
             } else {
-                client().decode(data(), decodeOptions(imageIndex, maxPixels), receiver);
+                call.decode(data(), decodeOptions(imageIndex, maxPixels), receiver);
             }
         } catch (IIOException e) {
             if (abortRequested()) {
@@ -237,10 +267,10 @@ final class WebPImageReader extends ImageReader {
         return dest;
     }
 
-    private BufferedImage readStillWithoutFeatures() throws IOException {
+    private BufferedImage readStillWithoutFeatures(WebPClient call) throws IOException {
         clearAbortRequest();
         processImageStarted(0);
-        long maxPixels = client().config().maxPixels();
+        long maxPixels = call.config().maxPixels();
         BufferedImage[] dest = new BufferedImage[1];
         // getImageTypes와 같은 규칙: alpha가 있으면 TYPE_INT_ARGB, 없으면 TYPE_INT_RGB(ADR-0013).
         ArgbFrameSink sink = ArgbFrameSink.allocatingOnHeader(maxPixels, h -> {
@@ -250,7 +280,7 @@ final class WebPImageReader extends ImageReader {
         });
         ProgressReceiver receiver = new ProgressReceiver(sink, 0, -1);
         try {
-            client().decode(data(), decodeOptions(0, maxPixels), receiver);
+            call.decode(data(), decodeOptions(0, maxPixels), receiver);
         } catch (IIOException e) {
             if (abortRequested()) {
                 processReadAborted();
@@ -308,7 +338,8 @@ final class WebPImageReader extends ImageReader {
      * ADR-0014 순차 읽기: 열어 둔 스트림의 다음 프레임이면 거기서 받고, 0번이면 스트림을 연다. 그 밖에는 스트림을 닫고
      * Decode(frame_index)로 한 프레임만 받는다. 스트림이 실패하면(데드라인 등) 닫고 Decode로 한 번 다시 받는다.
      */
-    private void readAnimationFrame(int imageIndex, ProgressReceiver receiver, long maxPixels) throws IOException {
+    private void readAnimationFrame(WebPClient call, int imageIndex, ProgressReceiver receiver, long maxPixels)
+            throws IOException {
         if (cursor != null && cursor.nextFrame() == imageIndex) {
             try {
                 cursor.readFrame(receiver);
@@ -322,26 +353,26 @@ final class WebPImageReader extends ImageReader {
         } else {
             closeCursor();
             if (imageIndex == 0) {
-                cursor = client().openDecodeAnimation(data(), maxPixels);
+                cursor = call.openDecodeAnimation(data(), maxPixels);
                 cursor.readFrame(receiver);
                 return;
             }
         }
-        client().decode(data(), decodeOptions(imageIndex, maxPixels), receiver);
+        call.decode(data(), decodeOptions(imageIndex, maxPixels), receiver);
     }
 
     /**
      * 대상 버퍼를 할당하기 전에 크기를 검사한다(클라이언트 쪽 decompression bomb 방어, docs/design/grpc-api.md §3).
      * 서버도 같은 검사를 하지만, 대상 이미지는 Decode를 부르기 전에 만들어지므로 여기서 먼저 막아야 한다.
      */
-    private void checkPixelLimits(int width, int height) throws IIOException {
+    private void checkPixelLimits(WebPClient call, int width, int height) throws IIOException {
         long pixels = (long) width * height;
-        long serverMax = client().limits().getMaxPixels();
+        long serverMax = call.limits().getMaxPixels();
         if (serverMax > 0 && pixels > serverMax) {
             throw new IIOException("WebP image exceeds server limit: " + width + "x" + height + " = " + pixels
                     + " pixels > max_pixels " + serverMax);
         }
-        long clientMax = client().config().maxPixels();
+        long clientMax = call.config().maxPixels();
         if (clientMax > 0 && pixels > clientMax) {
             throw new IIOException("WebP image " + width + "x" + height + " exceeds client limit " + clientMax
                     + " pixels (webp.imageio.max-pixels)");
