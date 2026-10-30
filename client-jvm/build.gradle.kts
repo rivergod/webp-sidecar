@@ -27,6 +27,8 @@ dependencies {
     implementation(libs.grpc.protobuf)
     implementation(libs.grpc.stub)
     implementation(libs.protobuf.java)
+    // module-info가 requires한다(module path에서 TCP + HTTP 프록시). grpc-netty가 런타임에 이미 가져오는 같은 버전이다.
+    implementation(libs.netty.handler.proxy)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
