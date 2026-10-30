@@ -33,6 +33,18 @@ GIF → WebP 변환(단건, 동시 부하, `gif2webp` 비교)은 [gif.sh](gif.sh
 bench/gif.sh inputs && bench/gif.sh single && bench/gif.sh load
 ```
 
+첫 호출 지연, 할당량, 연결 1개 대 3개, 장시간 섞인 부하와 서버 메모리 추이는 [soak.sh](soak.sh)로 잰다(결과: [research/0014](../docs/research/0014-load-soak.md)). 사진 세트가 먼저 있어야 한다.
+
+```sh
+bench/soak.sh first-call && bench/soak.sh alloc && bench/soak.sh compare && bench/soak.sh soak 60
+```
+
+libwebp alpha 디코딩 시간을 서버 빌드(musl·glibc, SSE2·AVX2)와 libwebp 버전별 공식 빌드로 비교하는 도구는 [libwebp-alpha/](libwebp-alpha/)에 있다(결과: [research/0013](../docs/research/0013-alpha-decode-gap.md)). 약 11분.
+
+```sh
+bench/libwebp-alpha/run.sh
+```
+
 ## 구성
 
 | 경로 | 내용 |

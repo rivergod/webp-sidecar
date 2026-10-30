@@ -72,7 +72,7 @@ docs/         조사(research), 결정(adr), 설계(design), 규칙(conventions)
 | 컨테이너 격리 확인 | `deploy/scripts/verify-hardening.sh` | 이미지를 먼저 빌드한다. seccomp 프로파일 갱신 절차: [deploy/README.md](deploy/README.md) |
 | 샘플 검사 | `python3 -I samples/scripts/manifest.py --check` | 다시 만들기·적합성 데이터 받기: [samples/README.md](samples/README.md) |
 | 서버 적합성(공식 벡터) | `cd server && cargo test --test conformance -- --ignored` | samples/conformance를 먼저 받는다 |
-| 서버 퍼징 | `server/fuzz/run.sh [decode\|get_features] [초]` | Docker 안 nightly + clang(호스트 설치 불필요). 결과 기록: [docs/research/0010-server-fuzzing.md](docs/research/0010-server-fuzzing.md) |
+| 서버 퍼징 | `server/fuzz/run.sh [decode\|get_features\|encode\|encode_animation] [초]` | Docker 안 nightly + clang(호스트 설치 불필요). 커버리지: `server/fuzz/coverage.sh`. 결과 기록: [docs/research/0010-server-fuzzing.md](docs/research/0010-server-fuzzing.md) |
 | client-jvm 단위 테스트 | `./gradlew :client-jvm:test` | 컴파일에 `-Werror`와 공개 API javadoc 검사(doclint) 포함. javadoc 생성도 함께 돈다 |
 | client-jvm 통합 테스트 | `./gradlew :client-jvm:integrationTest` | Docker 필요(서버 이미지를 먼저 빌드한다). JDK 매트릭스: `:client-jvm:testMatrix`. 그 밖의 작업: [client-jvm/README.md](client-jvm/README.md) |
 | bench | `bench/run.sh` (연결 확인만: `bench/run.sh smoke`) | Docker, taskset, Rust musl 타깃 필요. 전체 약 4시간. 상세: [bench/README.md](bench/README.md) |
