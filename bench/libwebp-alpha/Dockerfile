@@ -21,7 +21,19 @@ RUN apt-get update \
 WORKDIR /build
 COPY alpha_decode.c /build/alpha_decode.c
 # 내려받은 tarball은 sha256을 확인한 뒤에만 푼다.
+# 1.6.0-dispatch150: 원인 확인용 변형. 1.6.0에 1.5.0의 src/dsp/alpha_processing_sse2.c(DispatchAlpha_SSE2를
+# _mm_maskmoveu_si128로 바꾸기 전, upstream 44f91b0ddd07 이전)만 넣는다(research/0013).
 RUN set -e; \
+    build() { \
+      cmake -S "$1" -B "out-$2" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="/opt/libwebp-$2" \
+        -DBUILD_SHARED_LIBS=OFF -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF \
+        -DWEBP_BUILD_GIF2WEBP=OFF -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_WEBPINFO=OFF -DWEBP_BUILD_WEBPMUX=OFF \
+        -DWEBP_BUILD_VWEBP=OFF -DWEBP_BUILD_EXTRAS=OFF; \
+      cmake --build "out-$2" -j"$(nproc)"; \
+      cmake --install "out-$2"; \
+      gcc -std=c11 -O2 -Wall -Wextra -Werror -I"/opt/libwebp-$2/include" alpha_decode.c -o "/opt/alpha_decode-$2" \
+        "/opt/libwebp-$2/lib/libwebp.a" "/opt/libwebp-$2/lib/libsharpyuv.a" -lm -pthread; \
+    }; \
     for spec in 1.3.2:2a499607df669e40258e53d0ade8035ba4ec0175244869d1025d460562aa09b4 \
                 1.4.0:61f873ec69e3be1b99535634340d5bde750b2e4447caa1db9f61be3fd49ab1e5 \
                 1.5.0:7d6fab70cf844bf6769077bd5d7a74893f8ffd4dfb42861745750c63c2a5c92c \
@@ -30,17 +42,13 @@ RUN set -e; \
       curl -fsSLo libwebp-$v.tar.gz "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-$v.tar.gz"; \
       echo "$sum  libwebp-$v.tar.gz" | sha256sum -c -; \
       tar -xzf libwebp-$v.tar.gz; \
-      cmake -S libwebp-$v -B out-$v -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/libwebp-$v \
-        -DBUILD_SHARED_LIBS=OFF -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF \
-        -DWEBP_BUILD_GIF2WEBP=OFF -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_WEBPINFO=OFF -DWEBP_BUILD_WEBPMUX=OFF \
-        -DWEBP_BUILD_VWEBP=OFF -DWEBP_BUILD_EXTRAS=OFF; \
-      cmake --build out-$v -j"$(nproc)"; \
-      cmake --install out-$v; \
-      gcc -std=c11 -O2 -Wall -Wextra -Werror -I/opt/libwebp-$v/include alpha_decode.c -o /opt/alpha_decode-$v \
-        /opt/libwebp-$v/lib/libwebp.a /opt/libwebp-$v/lib/libsharpyuv.a -lm -pthread; \
-    done
+      build "libwebp-$v" "$v"; \
+    done; \
+    cp -r libwebp-1.6.0 libwebp-1.6.0-dispatch150; \
+    cp libwebp-1.5.0/src/dsp/alpha_processing_sse2.c libwebp-1.6.0-dispatch150/src/dsp/alpha_processing_sse2.c; \
+    build libwebp-1.6.0-dispatch150 1.6.0-dispatch150
 
 FROM ${BASE_IMAGE}
 COPY --from=build /opt/alpha_decode-1.3.2 /opt/alpha_decode-1.4.0 /opt/alpha_decode-1.5.0 /opt/alpha_decode-1.6.0 \
-  /usr/local/bin/
+  /opt/alpha_decode-1.6.0-dispatch150 /usr/local/bin/
 USER 65532:65532
