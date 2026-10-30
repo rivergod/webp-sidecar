@@ -2,7 +2,7 @@
 # 서버 입력 경로 퍼징(Phase 5-1). Docker 안에서 cargo-fuzz(libFuzzer) + ASan으로 Rust와 libwebp C 코드를 함께 계측한다.
 #
 #   server/fuzz/run.sh [대상] [초] [작업 수] [CPU]
-#     대상: decode(기본) | get_features
+#     대상: decode(기본) | get_features | encode | encode_animation
 #     초: 실행 시간(기본 600), 작업 수: libFuzzer -fork 수(기본 8), CPU: docker --cpuset-cpus(기본 16-31, E코어)
 #
 # 씨앗: samples/generated, samples/malformed, samples/conformance(있으면). 새로 찾은 입력은 server/fuzz/corpus/<대상>,
@@ -35,10 +35,15 @@ run=(docker run --rm -u "$(id -u):$(id -g)" --cpuset-cpus "$CPUS"
 "${run[@]}" sh -c 'rustc -vV | grep -E "^(release|LLVM)"; clang-23 --version | head -1'
 
 mkdir -p "server/fuzz/corpus/$TARGET" "server/fuzz/artifacts/$TARGET"
-seeds=(/src/samples/generated /src/samples/malformed)
-[ -d samples/conformance ] && seeds+=(/src/samples/conformance)
+# 인코딩 대상의 입력은 WebP 파일이 아니라 옵션·픽셀 바이트라 씨앗 없이 시작한다.
+seeds=()
+case "$TARGET" in
+  decode | get_features)
+    seeds=(/src/samples/generated /src/samples/malformed)
+    [ -d samples/conformance ] && seeds+=(/src/samples/conformance) ;;
+esac
 # 실패를 찾으면 멈춘다(기본). 결과 요약은 마지막 줄들(#… DONE, 실행 수, 커버리지)과 artifacts 디렉터리로 본다.
 "${run[@]:0:3}" --network none "${run[@]:3}" \
-  cargo fuzz run "$TARGET" "corpus/$TARGET" "${seeds[@]}" -- \
+  cargo fuzz run "$TARGET" "corpus/$TARGET" ${seeds[@]+"${seeds[@]}"} -- \
   -fork="$FORKS" -max_total_time="$SECS" -max_len=262144 -rss_limit_mb=2048 -timeout=20 \
   -artifact_prefix="artifacts/$TARGET/" -print_final_stats=1
