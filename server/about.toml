@@ -9,6 +9,6 @@ accepted = [
   "Unicode-3.0",
   "Zlib",
 ]
-targets = ["x86_64-unknown-linux-musl"]
+targets = ["x86_64-unknown-linux-gnu"]
 ignore-build-dependencies = true
 ignore-dev-dependencies = true

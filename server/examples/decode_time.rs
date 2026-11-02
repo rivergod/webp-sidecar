@@ -1,9 +1,10 @@
 //! 서버가 Decode 한 번에 쓰는 libwebp 디코딩 시간을 gRPC 없이 잰다(Phase 4 사이드카 비용 분해, bench/README.md).
 //!
-//! 사용: `cargo run --release --target x86_64-unknown-linux-musl --example decode_time -- <반복 수> <file.webp>...`
+//! 사용: `cargo run --release --example decode_time -- <반복 수> <file.webp>...`
 //!
 //! 서버의 Decode와 같은 함수(`features` + `decode_still_rgba`)를 단일 스레드로 부른다. 출력 버퍼 할당·해제를 포함한다.
-//! 컨테이너 이미지와 같은 할당자(musl)를 쓰려면 musl 타깃으로 빌드한다. 반복 수의 1/5을 먼저 버리고(워밍업) 나머지의
+//! 컨테이너 이미지는 glibc 할당자다(ADR-0021). 기본(gnu) 타깃이 같은 할당자이고, musl과 비교하려면
+//! `--target x86_64-unknown-linux-musl`로 빌드한다. 반복 수의 1/5을 먼저 버리고(워밍업) 나머지의
 //! 중앙값·최솟값·90백분위를 ms로 출력한다. `DECODE_TIME_REUSE=1`이면 출력 버퍼를 재사용한다.
 
 use std::time::{Duration, Instant};

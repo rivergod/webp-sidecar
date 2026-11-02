@@ -14,7 +14,7 @@ libwebp를 직접 링크한 gRPC 서버. 같은 호스트/파드의 사이드카
 sudo apt install rustup build-essential pkg-config protobuf-compiler
 rustup default stable
 
-# 선택: musl 정적 바이너리(scratch 이미지용)
+# 선택: musl 빌드(bench/libwebp-alpha의 musl·glibc 비교용. 서버 이미지는 glibc다, ADR-0021)
 sudo apt install musl-tools
 rustup target add x86_64-unknown-linux-musl
 ```
@@ -26,7 +26,7 @@ rustup target add x86_64-unknown-linux-musl
 
 ## 실행 구성
 
-이름, 설정 방식, 상한 기본값, 동시 처리, 컨테이너 제한, 소켓은 [ADR-0012](../docs/adr/0012-server-runtime-config.md)를 따른다. 설정 키 표는 [grpc-api.md §3.1](../docs/design/grpc-api.md).
+이름, 설정 방식, 상한 기본값, 동시 처리, 컨테이너 제한, 소켓은 [ADR-0012](../docs/adr/0012-server-runtime-config.md)를 따른다. 이미지와 libc는 [ADR-0021](../docs/adr/0021-glibc-distroless-image.md)(glibc 동적 + distroless/cc)이다. 설정 키 표는 [grpc-api.md §3.1](../docs/design/grpc-api.md).
 
 ## 구현 기본값 (Phase 1)
 
