@@ -15,7 +15,7 @@ Phase 4 JMH 벤치마크. 같은 입력으로 다음을 비교한다. 측정 조
 
 ## 실행
 
-Linux, Docker, `taskset`, Rust 툴체인(+ musl 타깃, `musl-gcc`)이 필요하다. 저장소 루트에서:
+Linux, Docker, `taskset`, Rust 툴체인이 필요하다(`bench/libwebp-alpha/`만 musl 타깃과 `musl-gcc`가 더 필요하다). 저장소 루트에서:
 
 ```sh
 bench/run.sh            # 전체(이미지 → 입력 → 검증 → JMH 전 묶음 → 서버 디코딩 시간 → 요약), 약 4시간
