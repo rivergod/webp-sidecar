@@ -75,6 +75,7 @@ docs/
 | [0018](adr/0018-decode-output-buffer-pool.md) | 정지 이미지 디코딩 출력 버퍼 재사용(버퍼 풀)과 만료 정책 | accepted |
 | [0019](adr/0019-prototype-retrospective.md) | 프로토타입 회고: 사이드카 구조를 계속한다(proto `webp.v1` 유지) | accepted |
 | [0020](adr/0020-imageio-config-injection.md) | ImageIO 플러그인 설정을 코드로 넘기는 방법 | accepted |
+| [0021](adr/0021-glibc-distroless-image.md) | 서버 이미지를 glibc 동적 바이너리 + distroless/cc로 바꾼다 | proposed |
 
 ### 조사
 
