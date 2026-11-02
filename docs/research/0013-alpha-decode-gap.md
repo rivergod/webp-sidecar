@@ -176,13 +176,14 @@ research/0011의 비용 분해에서 사진 alpha M의 서버 libwebp 시간(5.6
 이 문서는 결정하지 않는다. 결정이 나오면 ADR로 쓴다.
 
 - 결정(결정자, 2026-11-02): 원인 1의 A(upstream 보고)는 하지 않는다. 이 문서를 내부 기록으로 남긴다.
+- 결정(결정자, 2026-11-02): 원인 1의 B(서버 빌드에 되돌림 패치)는 ADR로 만들지 않는다. 나중에 libwebp에 패치를 제안할 때 볼 고려 사항을 아래 "외부 libwebp 패치를 제안할 때 고려할 사항"에 남긴다.
 
 ### 원인 1
 
 | 안 | 내용 | 비고 |
 |---|---|---|
 | A. upstream 보고 | libwebp 이슈 트래커에 재현 수치(이 문서 표 2, 3)와 함께 보고한다 | **하지 않는다**(결정자, 2026-11-02). 내부 기록으로만 둔다 |
-| B. 서버 빌드에 되돌림 패치 | 서버의 libwebp에 이 함수만 1.5.0 구현으로 되돌린다 | ADR-0008(릴리스 태그 고정, 선별 패치는 택하지 않음)과 충돌한다. 대체 ADR이 필요하다. libwebp-sys가 소스를 벤더링하므로 포크나 빌드 덮어쓰기가 필요하다. 패치 뒤 적합성 테스트와 픽셀 해시로 결과가 같은지 확인해야 한다 |
+| B. 서버 빌드에 되돌림 패치 | 서버의 libwebp에 이 함수만 1.5.0 구현으로 되돌린다 | **ADR로 만들지 않는다**(결정자, 2026-11-02). ADR-0008(릴리스 태그 고정, 선별 패치는 택하지 않음)과 충돌한다. 대체 ADR이 필요하다. libwebp-sys가 소스를 벤더링하므로 포크나 빌드 덮어쓰기가 필요하다. 패치 뒤 적합성 테스트와 픽셀 해시로 결과가 같은지 확인해야 한다 |
 | C. 함수 포인터 교체 | 서버가 초기화 뒤 `WebPDispatchAlpha` 전역 포인터를 자체 구현으로 바꾼다 | 공개 API가 아닌 내부 심볼에 기댄다. 권하지 않는다 |
 | D. 기다린다 | upstream이 고치면 다음 릴리스로 올린다 | main(2026-10-19)까지 고쳐지지 않았다. A 없이는 고쳐질 근거가 없다 |
 
@@ -193,6 +194,36 @@ research/0011의 비용 분해에서 사진 alpha M의 서버 libwebp 시간(5.6
 | E. glibc 기반 이미지 | 서버를 glibc로 동적 빌드해 distroless/cc 이미지에 넣는다(ADR-0012에서 검토한 대안) | ADR-0012(musl 정적 + scratch, glibc 정적 링크는 하지 않음)를 대체하는 ADR이 필요하다. 이미지가 커진다(스파이크 기준 11 MB). seccomp 프로파일은 다시 만들어 확인해야 한다 |
 | F. musl 정적 빌드에 다른 malloc | 정적 바이너리의 C `malloc`을 다른 할당자(mimalloc 등)로 바꾼다 | libwebp(C)가 쓰는 `malloc`까지 바뀌어야 효과가 있다. 정적 musl에서 가능한지 확인하지 않았다(미확인) |
 | G. 그대로 둔다 | 원인 1만 해소해도 추정상 M·L이 기준(0.5)을 넘는다 | 넘는 폭이 작다(0.51, 0.53) |
+
+## 외부 libwebp 패치를 제안할 때 고려할 사항
+
+지금은 제안하지 않는다(위 결정). 나중에 upstream에 패치를 내거나 서버 빌드에 패치를 넣을 때 아래를 먼저 본다.
+
+### 근거 보강
+
+- **CPU를 넓힌다.** 지금 근거는 i9-14900(Raptor Lake) 한 종류다. 최소한 AMD Zen 계열 하나와 다른 Intel 세대 하나에서 표 2와 같은 측정(`bench/libwebp-alpha/run.sh`)을 한다.
+  - upstream 커밋(`44f91b0ddd07`)은 어떤 데이터셋에서 빨라졌다고 했다. 어느 CPU에서 느려지고 어느 CPU에서 빨라지는지가 패치 방향(되돌림인지 CPU별 분기인지)을 정한다.
+  - 이 함수는 SSE2 경로라 x86만 해당한다. ARM(NEON)은 별도 파일이다.
+- **기제를 계측한다.** 이번에는 perf를 쓸 수 없었다(`perf_event_paranoid=4`). 권한이 있는 환경에서 `DispatchAlpha_SSE2`의 사이클 비중과 메모리 쓰기 이벤트를 1.5.0·1.6.0 구현으로 비교한다. "MASKMOVDQU의 non-temporal 부분 저장이 원인"이라는 지금 설명은 추정이다.
+- **결과가 같음을 보인다.** 이번 확인(RGBA 출력 FNV-1a 해시, 표 2 아래)에 더해 libwebp 자체 테스트와 공식 테스트 벡터(`server/tests/conformance.rs`가 쓰는 samples/conformance)로 네 RGB 출력 방식(RGBA, BGRA, ARGB, rgbA)을 모두 비교한다.
+- **입력 폭의 경계를 본다.** 1.6.0 구현은 16픽셀·8픽셀 단위 루프와 나머지 처리로 바뀌었다(`i + 16 <= width - 1`). 폭 1–33픽셀처럼 경계 근처 입력에서 1.5.0과 결과가 같은지 확인한다.
+
+### upstream 절차 (libwebp 1.6.0 `CONTRIBUTING.md`, 확인 2026-11-02)
+
+- 기여에는 Google CLA가 필요하다. 회사 업무로 만든 패치면 회사 명의 CLA가 필요할 수 있다. 저작권자 문제는 로드맵 "첫 배포 전 결정"과 같은 사람이 판단한다.
+- 리뷰는 Gerrit(`https://chromium-review.googlesource.com`)에서 한다. 패치는 `git push https://chromium-review.googlesource.com/webm/libwebp HEAD:refs/for/main`으로 보낸다.
+- 코드 스타일은 Google C++ Style Guide와 `clang-format --style=Google`이다.
+- upstream에 무언가를 올리는 것은 외부 공개 행위라 결정자 승인이 필요하다.
+
+### 서버 빌드에 넣을 때
+
+- **ADR-0008을 대체하는 ADR이 필요하다.** ADR-0008은 릴리스 태그를 고정하고 선별 패치를 택하지 않았다.
+- **libwebp-sys가 소스를 벤더링한다.** 패치하려면 크레이트를 포크하거나 `[patch.crates-io]`로 바꾼 사본을 써야 한다. libwebp를 올릴 때마다 패치가 아직 필요한지 다시 확인해야 한다.
+- **특허 허여의 범위를 확인한다.** libwebp `PATENTS`는 "these implementations"(Google이 WebM Project로 배포한 구현)에 허여하고, "claims that would be infringed only as a consequence of further modification of these implementations"는 제외한다(libwebp 1.6.0 `PATENTS`, 확인 2026-11-02).
+  - 1.5.0 구현으로 되돌리는 것은 Google이 배포한 구현을 쓰는 것이라 범위 안이라고 본다(추정).
+  - 새로 쓴 구현은 이 제외 문구에 걸릴 수 있다. 법률 판단이 필요하다(미확인).
+  - upstream에 받아들여진 패치는 그 뒤 릴리스에서 "these implementations"의 일부가 된다.
+- **라이선스 고지는 바뀌지 않는다.** BSD-3-Clause는 수정본 배포를 허용하고 고지 유지만 요구한다. 수정 사실은 고지 파일에 적는 것이 좋다.
 
 ## 한계
 
