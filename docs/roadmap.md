@@ -128,5 +128,5 @@ Phase 5까지 하지 않은 검증을 메운다(결정자 지시, 2026-10-30). �
 - [x] javadoc 생성을 평소 단위 테스트에 묶는다. — `./gradlew :client-jvm:test`가 javadoc 태스크도 돌린다. 그 전에 javadoc 태스크가 생성된 proto 클래스를 찾지 못해 실패하던 문제를 고쳤다(`--patch-module`)
 - [x] module path + HTTP 프록시(CONNECT) 경로를 시험한다. — 실패(`HttpProxyHandler` 클래스 없음)를 찾아 고쳤다(`io.netty.handler.proxy` 모듈 의존성). 테스트: `SpiRegistrationTest`(로컬 CONNECT 프록시)
 - [x] 인코딩 경로(Encode, EncodeAnimation) 퍼저를 더하고 libwebp까지 포함한 커버리지를 잰다. — 대상 2개 × 30분, 실패 0건. 커버리지 표와 미실행 영역 해석: [research/0010](research/0010-server-fuzzing.md)
-- [x] 사진 alpha 격차(ADR-0011 남은 미달 2건)의 원인을 좁힌다. — **원인 둘을 찾았다.** libwebp 1.6.0의 `DispatchAlpha_SSE2` 변경(upstream `44f91b0ddd07`, M 기준 약 0.98 ms)과 musl 할당자(M 기준 약 0.84 ms). upstream에는 보고하지 않고 내부 기록으로 둔다(결정자, 2026-11-02). 패치·기반 이미지 변경은 결정 후보다: [research/0013](research/0013-alpha-decode-gap.md)
+- [x] 사진 alpha 격차(ADR-0011 남은 미달 2건)의 원인을 좁힌다. — **원인 둘을 찾았다.** libwebp 1.6.0의 `DispatchAlpha_SSE2` 변경(upstream `44f91b0ddd07`, M 기준 약 0.98 ms)과 musl 할당자(M 기준 약 0.84 ms). upstream에는 보고하지 않고 내부 기록으로 둔다. 서버 빌드 패치도 ADR로 만들지 않고, 패치를 제안할 때 볼 고려 사항만 남긴다(결정자, 2026-11-02). 기반 이미지 변경은 결정 후보다: [research/0013](research/0013-alpha-decode-gap.md)
 - [x] 측정 범위를 넓힌다: 첫 호출 지연, 할당량·GC, 연결 1개 대 3개, 60분 섞인 부하와 서버 메모리 추이. — 60분 동안 메모리 증가 없음, 처리량 일정, 실패는 혼잡 거부(2.5%)뿐: [research/0014](research/0014-load-soak.md)
