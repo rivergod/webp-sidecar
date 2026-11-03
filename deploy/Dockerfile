@@ -54,5 +54,9 @@ COPY --from=build --chown=65532:65532 /out/run/webp-imageio /run/webp-imageio
 COPY LICENSE /licenses/LICENSE
 COPY server/licenses/ /licenses/
 COPY --from=build /out/licenses/BASE-IMAGE-PACKAGES.tsv /licenses/BASE-IMAGE-PACKAGES.tsv
+# ADR-0021: glibc arena를 기본 동시 처리 수(2)만큼으로 묶는다. 서버의 유휴 trim(malloc_trim)은 스레드별 arena의
+# 꼭대기를 줄이지 못해, 기본값(arena가 스레드마다 늘어남)이면 부하 뒤 수십 MiB가 남는다(research/0015).
+# 동시 처리(WEBP_SERVER_MAX_CONCURRENCY)를 늘리면 실행할 때 -e MALLOC_ARENA_MAX=<값>으로 함께 올린다.
+ENV MALLOC_ARENA_MAX=2
 USER 65532:65532
 ENTRYPOINT ["/webp-imageio-server"]

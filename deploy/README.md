@@ -36,6 +36,7 @@ docker run -d --name webp-server \
 - 호스트 디렉터리를 바인드 마운트해 호스트 프로세스가 붙게 하려면 `--user "$(id -u):$(id -g)"`로 소유자를 맞춘다.
 - 설정은 환경변수(`-e WEBP_SERVER_...`)나 명령줄 인자로 준다. 키: [docs/design/grpc-api.md §3.1](../docs/design/grpc-api.md).
 - **메모리 제한을 바꾸면 메모리 예산도 함께 바꾼다**: 서버는 `WEBP_SERVER_MAX_MEMORY_BYTES`(기본 768 MiB, `--memory 1g`의 75%) 안에서만 요청을 받는다([ADR-0016](../docs/adr/0016-memory-budget-admission.md)). 컨테이너 제한만 올리면 큰 인코딩은 계속 거부된다. 예: `--memory 4g`이면 `-e WEBP_SERVER_MAX_MEMORY_BYTES=3221225472`(3 GiB).
+- **동시 처리를 늘리면 glibc arena 수도 함께 늘린다**: 이미지는 `MALLOC_ARENA_MAX=2`(기본 동시 처리 2와 같은 수)로 뜬다. arena가 적으면 부하가 끝난 뒤 서버가 빈 메모리를 거의 다 돌려준다(유휴 60초 뒤 약 2 MiB). 대신 스레드 사이 할당 경합이 생길 수 있다(섞인 부하 처리량 약 −3%, [ADR-0021](../docs/adr/0021-glibc-distroless-image.md), [research/0015](../docs/research/0015-glibc-image-verification.md)). 예: `-e WEBP_SERVER_MAX_CONCURRENCY=4 -e MALLOC_ARENA_MAX=4`.
 - 개발용 TCP: `--network` 제한을 풀고 `-e WEBP_SERVER_TCP_ADDR=0.0.0.0:50051 -p 127.0.0.1:50051:50051`. 컨테이너 안에서는 `0.0.0.0`에 바인드해야 포트 게시가 동작하고, 호스트 쪽은 `127.0.0.1`로만 연다.
 - **UDS 경로 길이**: AF_UNIX 소켓 경로는 약 107바이트를 넘을 수 없다. 깊은 임시 디렉터리에 소켓을 두면 연결이 실패한다(기본 `/run/webp-imageio/webp.sock`은 문제없다).
 
@@ -74,7 +75,7 @@ deploy/scripts/verify-hardening.sh            # 저장소 루트에서. 이미�
 | 마운트·네트워크 | `/`는 `ro`, `/run/webp-imageio`만 `rw`. 네트워크 인터페이스는 `lo`뿐 |
 | cgroup v2 | `memory.max` 1 GiB, `memory.swap.max` 0, `cpu.max` `200000 100000`, `pids.max` 128 |
 
-2026-10-29 실행 결과: 23개 모두 통과(Docker 29.1.3, runc 1.4.0, cgroup v2). glibc 이미지(ADR-0021)로 바꾼 뒤 2026-11-02에도 23개 모두 통과했다. 메모리 상한이 실제로 프로세스를 멈추는 것은 메모리 예산 측정에서 확인했다(OOMKilled, [research/0007](../docs/research/0007-server-memory-budget.md)).
+2026-10-29 실행 결과: 23개 모두 통과(Docker 29.1.3, runc 1.4.0, cgroup v2). glibc 이미지(ADR-0021)로 바꾼 뒤 2026-11-02에도, 유휴 힙 반환(`malloc_trim`)을 넣은 뒤 2026-11-03에도 23개 모두 통과했다. 메모리 상한이 실제로 프로세스를 멈추는 것은 메모리 예산 측정에서 확인했다(OOMKilled, [research/0007](../docs/research/0007-server-memory-budget.md)).
 
 ## 스모크 테스트
 
@@ -91,4 +92,4 @@ docker rm -f webp-smoke
 
 ## 메모리 예산 측정
 
-`server/scripts/measure-memory.sh <메모리 제한> <동시 요청 수> <변 픽셀>` — 결과와 해석은 [docs/research/0007-server-memory-budget.md](../docs/research/0007-server-memory-budget.md).
+`server/scripts/measure-memory.sh <메모리 제한> <동시 요청 수> <변 픽셀>` — 결과와 해석은 [docs/research/0007-server-memory-budget.md](../docs/research/0007-server-memory-budget.md). glibc 이미지의 값과, 부하로 데운 컨테이너의 최고치·유휴 반환은 [docs/research/0015-glibc-image-verification.md](../docs/research/0015-glibc-image-verification.md)에 있다.

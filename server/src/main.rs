@@ -8,6 +8,7 @@ use tokio::net::{TcpListener, UnixListener};
 use tokio::sync::watch;
 use tokio_stream::wrappers::UnixListenerStream;
 use webp_imageio_server::config::{Cli, Config};
+use webp_imageio_server::heap::{self, IdleTrim};
 use webp_imageio_server::pool::BufferPool;
 use webp_imageio_server::service::WebpService;
 use webp_imageio_server::{router, tcp_incoming};
@@ -60,16 +61,23 @@ async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
         pool.clone(),
         config.request_policy,
     );
-    // 출력 버퍼 풀의 유휴 버퍼를 주기적으로 해제한다(ADR-0018). 부하가 끝나면 상주 메모리가 돌아온다.
-    if config.buffer_pool.max_bytes > 0 {
+    // 출력 버퍼 풀의 유휴 버퍼를 주기적으로 해제한다(ADR-0018). 서버가 유휴로 접어들면 할당자(glibc)가 쥔 빈 페이지도
+    // 돌려준다(ADR-0021). 그래야 부하가 끝난 뒤 상주 메모리가 돌아온다. 풀을 꺼도 힙 반환은 필요하므로 항상 돈다.
+    {
         let period = (config.buffer_pool.idle / 2).max(std::time::Duration::from_millis(1));
+        let service = service.clone();
         tokio::spawn(async move {
             let mut ticks = tokio::time::interval(period);
+            let mut trim = IdleTrim::default();
             loop {
                 ticks.tick().await;
                 let freed = pool.evict_expired();
                 if freed > 0 {
                     tracing::debug!(freed_bytes = freed, "released idle pool buffers");
+                }
+                if trim.should_trim(service.activity(), freed) {
+                    let released = heap::release_free_memory();
+                    tracing::debug!(released, "trimmed allocator free memory");
                 }
             }
         });

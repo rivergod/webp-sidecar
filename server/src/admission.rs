@@ -15,7 +15,7 @@
 
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, TryAcquireError, mpsc};
@@ -69,6 +69,19 @@ pub struct Admission {
     budget: Budget,
     waiting: Arc<AtomicUsize>,
     policy: RequestPolicy,
+    /// 슬롯 수(`permits`의 전체 허가 수).
+    slots: usize,
+    /// 서버가 뜬 뒤 슬롯을 얻은 요청 수(누적).
+    started: AtomicU64,
+}
+
+/// 요청 허용 쪽에서 본 서버 활동. 유휴 정리(ADR-0021 `malloc_trim`, [`crate::heap::IdleTrim`])가 쓴다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Activity {
+    /// 서버가 뜬 뒤 슬롯을 얻은 요청 수(누적).
+    pub started: u64,
+    /// 지금 슬롯이나 메모리 예약을 쥐었거나, 그것을 기다리는 요청이 있다.
+    pub busy: bool,
 }
 
 /// 예산 크기(오류 메시지용).
@@ -102,8 +115,9 @@ impl Admission {
     /// `policy.max_memory_bytes - pool_bytes`를 1 KiB 단위로 내림한 값이다(설정 검사가 양수를 보장한다).
     pub fn new(max_concurrency: usize, policy: RequestPolicy, pool_bytes: u64) -> Self {
         let kib = (policy.max_memory_bytes.saturating_sub(pool_bytes) / KIB).min(u64::from(u32::MAX));
+        let slots = max_concurrency.max(1);
         Self {
-            permits: Arc::new(Semaphore::new(max_concurrency.max(1))),
+            permits: Arc::new(Semaphore::new(slots)),
             memory: Arc::new(Semaphore::new(kib as usize)),
             budget: Budget {
                 kib,
@@ -112,6 +126,8 @@ impl Admission {
             },
             waiting: Arc::new(AtomicUsize::new(0)),
             policy,
+            slots,
+            started: AtomicU64::new(0),
         }
     }
 
@@ -133,6 +149,17 @@ impl Admission {
     /// 지금 예약되지 않은 예산. 단위: 바이트.
     pub fn available_memory_bytes(&self) -> u64 {
         self.memory.available_permits() as u64 * KIB
+    }
+
+    /// 지금의 활동 상태. 값들을 따로 읽으므로 읽는 사이에 요청이 시작될 수 있다(유휴 판단용 근사값).
+    pub fn activity(&self) -> Activity {
+        let busy = self.waiting() > 0
+            || self.permits.available_permits() < self.slots
+            || self.available_memory_bytes() < self.memory_budget_bytes();
+        Activity {
+            started: self.started.load(Ordering::SeqCst),
+            busy,
+        }
     }
 
     /// 대기 자리를 잡는다. 슬롯을 잡기 전에 입력 머리를 읽어야 하는 요청(디코딩 추정, ADR-0016)이 먼저 부른다.
@@ -216,6 +243,7 @@ impl Admission {
     }
 
     fn slot(&self, cpu: OwnedSemaphorePermit, memory: OwnedSemaphorePermit) -> Slot {
+        self.started.fetch_add(1, Ordering::SeqCst);
         Slot {
             _cpu: cpu,
             reserved_kib: memory.num_permits() as u64,
@@ -462,6 +490,38 @@ mod tests {
 
         // Assert
         assert_eq!(admission.waiting(), 0);
+    }
+
+    #[tokio::test]
+    async fn activity_with_held_slot_is_busy() {
+        // Arrange
+        let admission = admission(1, 0, 1);
+        let _held = admission.acquire(1).await.unwrap();
+
+        // Act
+        let activity = admission.activity();
+
+        // Assert
+        assert_eq!(activity, Activity { started: 1, busy: true });
+    }
+
+    #[tokio::test]
+    async fn activity_after_slot_released_is_idle_and_keeps_count() {
+        // Arrange
+        let admission = admission(1, 0, 1);
+        drop(admission.acquire(1).await.unwrap());
+
+        // Act
+        let activity = admission.activity();
+
+        // Assert
+        assert_eq!(
+            activity,
+            Activity {
+                started: 1,
+                busy: false
+            }
+        );
     }
 
     #[tokio::test(start_paused = true)]

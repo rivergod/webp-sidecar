@@ -1301,6 +1301,7 @@ dependencies = [
  "bytes",
  "clap",
  "hyper-util",
+ "libc",
  "libwebp-sys",
  "md-5",
  "prost",
