@@ -1,5 +1,5 @@
 date_utc: 2026-10-29T08:30:51Z
-git: f1b4feabd3d5f54893d7886454d47738f3e87dc2 (dirty)
+git: 1fec8ac47bc486ab8f274e7c2e6ab0ff2dfc4cfa (dirty)
 image: sha256:aa708ccc2177dbf027962cfbb8a987d630628805926b81a171f011dbecee86da
 java: openjdk version "25.0.5" 2026-10-20 LTS
 input: video_572x315_111.gif 8592044 8a4652ef486b01ab0fa5e5925678634696ecee0e52d4f2329e23293f2a3ec084
@@ -8,4 +8,4 @@ input: video_480x270_10.gif 506327 604eb3aad38045deacdc05df0e1f9b526380427d0a42f
 input: video_480x270_100.gif 5927703 6921fe1cbcabb9e870f43e38d58b2276fe63c30e905bb70a7b4f0c32260abe6b
 input: video_480x270_300.gif 18431993 1db3b7a5617a006c56ffcab4279587d7347653acf9ef7ef5f24c1bba1e3200b7
 input: video_480x270_1000.gif 61325114 4fbacbfce6b53c361876c4d295a7d30adaa523a4fa0278f5d04a650126a7e2fb
-note: 측정 시점의 작업 트리(dirty)는 커밋 f1b4fea(ADR-0016 구현)와 같은 서버 코드다. load-rerun.txt는 같은 조건 반복, load-ab-main.txt는 ADR-0016 전 main(0160b9a) 이미지, load-ab-branch.txt는 바로 뒤 같은 호스트 상태의 ADR-0016 이미지다. 이 줄은 측정 뒤에 덧붙였다.
+note: 측정 시점의 작업 트리(dirty)는 커밋 1fec8ac(ADR-0016 구현)와 같은 서버 코드다. load-rerun.txt는 같은 조건 반복, load-ab-main.txt는 ADR-0016 전 main(54c7c5b) 이미지, load-ab-branch.txt는 바로 뒤 같은 호스트 상태의 ADR-0016 이미지다. 이 줄은 측정 뒤에 덧붙였다.

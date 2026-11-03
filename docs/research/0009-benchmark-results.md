@@ -45,7 +45,7 @@ ADR-0015를 따른다. 값은 `environment.txt`에 기록된 것이다.
 | 전송 | UDS(바인드 마운트한 소켓, JNI 없는 NIO 경로). TCP는 `--network host`의 127.0.0.1(파드 안 사이드카와 같은 루프백 경로, docker-proxy 없음) |
 | 응답 조각 | 기본 1 MiB. 비교: 256 KiB, 512 KiB, 2 MiB(`WEBP_SERVER_MAX_CHUNK_BYTES`) |
 
-- 측정 코드는 커밋 `5d1817f`다.
+- 측정 코드는 커밋 `576385f`다.
 - `environment.txt`의 `(dirty)`는 측정 시작 뒤 문서 인덱스(`docs/README.md`)를 고친 것 때문이다. 측정 코드와는 관계없다.
 - `decode-servers`와 `decode-chunk` 묶음은 대조 재측정 값이다(아래 "전송 방식, SIMD 빌드, 응답 조각 크기"). 재측정 환경은 `environment-control.txt`에 있다.
 

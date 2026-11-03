@@ -1,5 +1,5 @@
 date_utc: 2026-10-29T07:24:35Z
-git: 79db2591523b7b4d3cf336a0d4042ecdd6e3406f (dirty)
+git: 557202c2542f00baf54148e1c31876ceb175e20c (dirty)
 image: sha256:501a98c277c067b22555f1ac44334aa6e68045bde1f95036bd1b857b266c1550
 java: openjdk version "25.0.5" 2026-10-20 LTS
 input: video_572x315_111.gif 8592044 8a4652ef486b01ab0fa5e5925678634696ecee0e52d4f2329e23293f2a3ec084
@@ -8,4 +8,4 @@ input: video_480x270_10.gif 506327 604eb3aad38045deacdc05df0e1f9b526380427d0a42f
 input: video_480x270_100.gif 5927703 6921fe1cbcabb9e870f43e38d58b2276fe63c30e905bb70a7b4f0c32260abe6b
 input: video_480x270_300.gif 18431993 1db3b7a5617a006c56ffcab4279587d7347653acf9ef7ef5f24c1bba1e3200b7
 input: video_480x270_1000.gif 61325114 4fbacbfce6b53c361876c4d295a7d30adaa523a4fa0278f5d04a650126a7e2fb
-note: 측정 시점의 작업 트리(dirty)는 뒤에 커밋 5dfe0c0(server), 25d1196(client), fc607c4(GifBench 재시도)로 들어갔다. 이 줄은 측정 뒤에 덧붙였다.
+note: 측정 시점의 작업 트리(dirty)는 뒤에 커밋 72c1f9a(server), d749c95(client), d9130ba(GifBench 재시도)로 들어갔다. 이 줄은 측정 뒤에 덧붙였다.

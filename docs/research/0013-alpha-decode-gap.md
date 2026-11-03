@@ -59,7 +59,7 @@ research/0011의 비용 분해에서 사진 alpha M의 서버 libwebp 시간(5.6
 | 서버 빌드(`server-build.tsv`) | `server/examples/decode_time.rs`. 서버 Decode와 같은 함수(`features` + `decode_still_rgba_into`)이고, 출력 버퍼를 재사용한다(`DECODE_TIME_REUSE=1`, 풀과 같다). libwebp-sys 0.14.4(벤더링한 libwebp 1.6.0). {musl, glibc} × {SSE2(기본), AVX2(`simd-avx2`, SSE4.1 포함)} |
 | 공식 빌드(`c-harness.tsv`) | 공식 tarball(sha256 확인, WebP release signing key `6B0E6B70976DE303EDF2F601F9C3D6BDB8232B5D`의 서명 확인)을 CMake Release, 정적 라이브러리, glibc(Debian trixie), 기본 SIMD 런타임 선택으로 빌드했다. `alpha_decode.c`(`WebPDecode`). `into`는 미리 할당한 버퍼에, `alloc`은 libwebp가 할당한다 |
 | 할당 계측(`allocator-faults.tsv`) | 서버 빌드(SSE2)를 반복 10회와 210회로 돌린 차이를 200으로 나눴다. minor page fault는 GNU time(`%R`), mmap/munmap은 `strace -c` |
-| 커밋 | `ca19709`. `environment.txt`의 "(dirty)"는 측정 중 편집하던 문서(`docs/`, `bench/.gitignore`)다. 측정 도구 변경은 없다 |
+| 커밋 | `47b955a`. `environment.txt`의 "(dirty)"는 측정 중 편집하던 문서(`docs/`, `bench/.gitignore`)다. 측정 도구 변경은 없다 |
 
 ## 결과
 
