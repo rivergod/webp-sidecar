@@ -194,4 +194,4 @@ WARNING: Unknown channel option 'SO_KEEPALIVE' for channel '[id: …]' of type '
 | 수용량 맞추기 안내 | 서버 하나를 쓰는 모든 클라이언트의 동시 요청 합이 `max_concurrency + max_queued_requests`를 넘으면 busy 거부가 생긴다. 운영 문서에 적을지, 기본값(대기 8)을 바꿀지 |
 | 입력 수집 할당 | 길이를 모르는 입력을 모을 때 두 배씩 늘리는 비용(압축 데이터의 약 5배). 큰 lossless 입력이 많으면 줄일 가치가 있다. 재시도 때 입력을 다시 보내야 하므로 버퍼 자체는 필요하다 |
 | `SO_KEEPALIVE` 경고 | 사용자 문서(client-jvm/README.md)에 원인과 숨기는 방법을 적을지 |
-| 쉬는 상태 메모리 | 부하 뒤 서버 메모리가 바닥(약 45 MiB)이나 풀 상한 아래로 돌아오는지 확인 |
+| 쉬는 상태 메모리 | 부하 뒤 서버 메모리가 바닥(약 45 MiB)이나 풀 상한 아래로 돌아오는지 확인. — glibc 이미지(ADR-0021)로 [research/0015](0015-glibc-image-verification.md) "부하 뒤 확인"에서 쟀다 |
