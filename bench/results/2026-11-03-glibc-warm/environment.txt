@@ -1,0 +1,6 @@
+date_utc: 2026-11-03T02:30:07Z
+git: 694086611524421f88bd7a65ee4bf3c9af814c11
+image: webp-imageio-server:dev sha256:fbdcf58193ed8976fcdcfe9764c3f279b3b563d896fc487d9715123b81d6bf7e
+seccomp: /home/rivergod/_git/webp-imageio-external-server-proto/deploy/seccomp/webp-imageio-server.json
+warm_minutes: 20 (MixedLoad, JVM 3 x 4 threads, busy-retries 3)
+note: image was tagged webp-imageio-server:dev at run time (no malloc_trim, ADR-0021 before amendment)

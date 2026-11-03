@@ -1,0 +1,9 @@
+date_utc: 2026-11-03T04:27Z - 05:01Z
+git: 7d7b402 (dirty: server malloc_trim change, deploy/Dockerfile ENV MALLOC_ARENA_MAX=2)
+tool: bench/glibc-check/jmh-subset.sh logic (DecodeBenchmark, content=photo, mode=alpha,lossy, size=M,L, server=sse2-uds; fork 3, warmup 5 x 1 s, measurement 10 x 1 s), run from a scratch copy
+configs: glibc-default = webp-imageio-server:glibc-notrim sha256:fbdcf581... (commit 2ad7555, no trim, default arenas)
+         final = webp-imageio-server:dev sha256:33b0327d... (deploy/Dockerfile: malloc_trim + MALLOC_ARENA_MAX=2; same layers as c8ffaa87...)
+         trim-arena64 = the final image with -e MALLOC_ARENA_MAX=64 (trim, arenas effectively unlimited for this thread count)
+round 1 also measured DARKXANTER (JNI) for the ratio. Round 3 is ABBA ordered to cancel time drift.
+cpu: Intel(R) Core(TM) i9-14900, server pinned 12,14 (--cpus 2, --memory 1g), JVM 0,2,4,6
+java: openjdk version "25.0.5" 2026-10-20 LTS

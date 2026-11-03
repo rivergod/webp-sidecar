@@ -1,0 +1,11 @@
+date_utc: 2026-11-03T02:27:05Z
+git: 694086611524421f88bd7a65ee4bf3c9af814c11 (dirty: bench/run.sh, docs)
+tool: bench/glibc-check/faults.sh (same logic; run from a scratch copy before it was added to the repository)
+musl: webp-imageio-server:musl-baseline sha256:7001fdc9d7f99a6e57e9ee20b9172d9e6f6c5962adf6059a590e4ef08edac28d, seccomp = main 9cfd31f deploy/seccomp/webp-imageio-server.json
+glibc: webp-imageio-server:glibc-notrim sha256:fbdcf58193ed8976fcdcfe9764c3f279b3b563d896fc487d9715123b81d6bf7e, seccomp = 6940866 deploy/seccomp/webp-imageio-server.json
+jmh: TransportBenchmark.decode, server=sse2-uds, content=photo, -bm ss -bs B -wi 1 -i 1 -f 1, B = M 100, L 50, XL 20
+cpu: Intel(R) Core(TM) i9-14900, server pinned 12,14 (--cpus 2, --memory 1g), JVM 0,2,4,6
+java: openjdk version "25.0.5" 2026-10-20 LTS
+faults-arena.tsv: 2026-11-03T03:54Z, git 7d7b402 (dirty: server malloc_trim change), tool bench/glibc-check/faults.sh
+  glibc = webp-imageio-server:dev sha256:b8257976... (malloc_trim, default arenas)
+  glibc-arena2 = the same image + ENV MALLOC_ARENA_MAX=2 (sha256:01f53522...)

@@ -1,0 +1,10 @@
+image: webp-imageio-server:dev (malloc_trim; same layers as the final image c8ffaa87) extra_docker_args: 
+tool: bench/glibc-check/idle-probe.sh logic, run from a scratch copy on 2026-11-03; map lines computed afterwards from smaps.txt with the same awk
+load_end anon_mib=128.3
+idle60 anon_mib=37.4 threads=3
+Rss:               43912 kB
+Anonymous:         38292 kB
+map anon_mib=10.8 size_mib=30.7 7ef898000000-7ef899eb9000 [anon]
+map anon_mib=10.3 size_mib=17.2 7ef8a4000000-7ef8a5127000 [anon]
+map anon_mib=8.1 size_mib=38.3 7ef894000000-7ef89664e000 [anon]
+map anon_mib=7.3 size_mib=14.7 7ef89c000000-7ef89cebd000 [anon]

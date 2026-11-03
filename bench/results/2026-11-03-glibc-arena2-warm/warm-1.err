@@ -1,0 +1,2 @@
+Nov 03, 2026 12:57:36 PM io.netty.bootstrap.AbstractBootstrap setChannelOption
+WARNING: Unknown channel option 'SO_KEEPALIVE' for channel '[id: 0x7cb433dc]' of type 'class io.netty.channel.socket.nio.NioDomainSocketChannel'

@@ -1,0 +1,41 @@
+round	order	config	image	extra_docker_args	impl	mode	size	score_ops_s	error_99_9
+1	1	final	sha256:33b0327d7c7c…		SIDECAR	alpha	M	126.51	5.82
+1	1	final	sha256:33b0327d7c7c…		SIDECAR	alpha	L	52.42	2.56
+1	1	final	sha256:33b0327d7c7c…		SIDECAR	lossy	M	195.85	12.48
+1	1	final	sha256:33b0327d7c7c…		SIDECAR	lossy	L	84.71	6.83
+1	1	final	sha256:33b0327d7c7c…		DARKXANTER	alpha	M	239.89	6.83
+1	1	final	sha256:33b0327d7c7c…		DARKXANTER	alpha	L	101.65	1.90
+1	1	final	sha256:33b0327d7c7c…		DARKXANTER	lossy	M	341.77	3.75
+1	1	final	sha256:33b0327d7c7c…		DARKXANTER	lossy	L	148.73	1.94
+1	2	glibc-default	sha256:fbdcf58193ed…		SIDECAR	alpha	M	139.07	6.52
+1	2	glibc-default	sha256:fbdcf58193ed…		SIDECAR	alpha	L	55.24	2.88
+1	2	glibc-default	sha256:fbdcf58193ed…		SIDECAR	lossy	M	215.77	14.55
+1	2	glibc-default	sha256:fbdcf58193ed…		SIDECAR	lossy	L	88.86	6.64
+2	1	trim-arena64	sha256:33b0327d7c7c…	-e MALLOC_ARENA_MAX=64	SIDECAR	alpha	M	127.69	5.41
+2	1	trim-arena64	sha256:33b0327d7c7c…	-e MALLOC_ARENA_MAX=64	SIDECAR	alpha	L	56.26	2.93
+2	1	trim-arena64	sha256:33b0327d7c7c…	-e MALLOC_ARENA_MAX=64	SIDECAR	lossy	M	209.18	13.61
+2	1	trim-arena64	sha256:33b0327d7c7c…	-e MALLOC_ARENA_MAX=64	SIDECAR	lossy	L	90.77	7.38
+2	2	final	sha256:33b0327d7c7c…		SIDECAR	alpha	M	131.93	6.18
+2	2	final	sha256:33b0327d7c7c…		SIDECAR	alpha	L	55.85	3.01
+2	2	final	sha256:33b0327d7c7c…		SIDECAR	lossy	M	213.30	13.11
+2	2	final	sha256:33b0327d7c7c…		SIDECAR	lossy	L	92.46	6.90
+2	3	glibc-default	sha256:fbdcf58193ed…		SIDECAR	alpha	M	138.30	6.63
+2	3	glibc-default	sha256:fbdcf58193ed…		SIDECAR	alpha	L	57.91	2.92
+2	3	glibc-default	sha256:fbdcf58193ed…		SIDECAR	lossy	M	215.28	13.89
+2	3	glibc-default	sha256:fbdcf58193ed…		SIDECAR	lossy	L	92.92	7.12
+3	1	glibc-default	sha256:fbdcf58193ed…		SIDECAR	alpha	M	129.76	7.20
+3	1	glibc-default	sha256:fbdcf58193ed…		SIDECAR	alpha	L	57.22	2.74
+3	1	glibc-default	sha256:fbdcf58193ed…		SIDECAR	lossy	M	215.03	13.22
+3	1	glibc-default	sha256:fbdcf58193ed…		SIDECAR	lossy	L	91.24	7.07
+3	2	final	sha256:33b0327d7c7c…		SIDECAR	alpha	M	134.74	6.76
+3	2	final	sha256:33b0327d7c7c…		SIDECAR	alpha	L	56.99	3.35
+3	2	final	sha256:33b0327d7c7c…		SIDECAR	lossy	M	202.44	13.77
+3	2	final	sha256:33b0327d7c7c…		SIDECAR	lossy	L	89.08	7.03
+3	3	final	sha256:33b0327d7c7c…		SIDECAR	alpha	M	133.29	6.81
+3	3	final	sha256:33b0327d7c7c…		SIDECAR	alpha	L	56.04	2.70
+3	3	final	sha256:33b0327d7c7c…		SIDECAR	lossy	M	208.11	15.24
+3	3	final	sha256:33b0327d7c7c…		SIDECAR	lossy	L	92.14	7.06
+3	4	glibc-default	sha256:fbdcf58193ed…		SIDECAR	alpha	M	138.09	6.10
+3	4	glibc-default	sha256:fbdcf58193ed…		SIDECAR	alpha	L	57.27	2.69
+3	4	glibc-default	sha256:fbdcf58193ed…		SIDECAR	lossy	M	213.76	14.81
+3	4	glibc-default	sha256:fbdcf58193ed…		SIDECAR	lossy	L	91.46	7.31
