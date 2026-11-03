@@ -1,6 +1,6 @@
 # 0012. 서버 실행 구성: 이름, 설정, 상한 기본값, 동시 처리, 컨테이너, 소켓
 
-- 상태: accepted
+- 상태: accepted. "이미지 / libc" 항목만 superseded by [0021](0021-glibc-distroless-image.md)(2026-11-03)
 - 날짜: 2026-10-23
 - 결정자: Ilkang Na
 - 관련 문서: [ADR-0002](0002-server-language.md), [ADR-0003](0003-transport.md), [docs/design/grpc-api.md](../design/grpc-api.md) §3, [docs/research/0006-license.md](../research/0006-license.md)

@@ -1,8 +1,8 @@
 # 0021. 서버 이미지를 glibc 동적 바이너리 + distroless/cc로 바꾼다
 
-- 상태: proposed
+- 상태: accepted
 - 날짜: 2026-11-02
-- 결정자:
+- 결정자: Ilkang Na
 - 관련 문서: [ADR-0012](0012-server-runtime-config.md)(서버 실행 구성. 이 ADR은 그중 "이미지 / libc" 항목만 대체한다), [ADR-0009](0009-license.md)(라이선스), [ADR-0018](0018-decode-output-buffer-pool.md)(출력 버퍼 풀), [ADR-0016](0016-memory-budget-admission.md)(메모리 예산), [ADR-0011](0011-hypothesis-criteria.md)(판정 기준), [research/0013](../research/0013-alpha-decode-gap.md)(alpha 격차 원인), [research/0006](../research/0006-license.md) "glibc 동적 이미지의 배포 의무", [research/0009](../research/0009-benchmark-results.md) "할당자"
 
 ## 맥락

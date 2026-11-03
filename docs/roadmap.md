@@ -11,6 +11,7 @@
 | Phase 4 | JMH 벤치마크 + 결과 보고서 | 완료 (2026-10-23, JDeli는 요청 시) |
 | Phase 5 | 보안 강화(seccomp, 퍼징) + 성능 보강 + proto 회고 | 완료 (2026-10-29). 사이드카 구조로 확정(ADR-0019), 버퍼 풀 확정(ADR-0018), 작업량 상한 확정·구현(ADR-0017), 메모리 예산 확정·구현(ADR-0016), 설정 주입 확정(ADR-0020, 2026-10-30) |
 | 검증 보강 | javadoc·프록시 경로 시험, 인코딩 퍼징·커버리지, alpha 격차 원인, 장시간·섞인 부하 | 완료 (2026-10-30). 대응 결정은 후보로 넘김(research/0013, 0014) |
+| glibc 서버 이미지 | 서버 이미지를 glibc 동적 + distroless/cc로 바꾸고(ADR-0021) 확인한다 | 완료 (2026-11-03). ADR-0021 확정, ADR-0011 18/18 충족 |
 
 ## Phase 0: 기반 정리
 
@@ -93,6 +94,7 @@
 - [ ] 저작권자 표기(개인/조직)와 `NOTICE` 파일([ADR-0009](adr/0009-license.md))
 - [ ] 원격 저장소 위치·공개 여부와 CI
 - [ ] Maven Central 배포 여부. 배포하면 `rivergod.net`에 DNS TXT 레코드로 namespace를 확인받아야 한다([ADR-0010](adr/0010-maven-coordinates.md)).
+- [ ] 서버 이미지의 대응 소스 제공 방식. glibc·libgcc 등 LGPL/GPL 패키지 바이너리를 함께 배포하므로 소스를 어떻게 제공할지(snapshot.debian.org를 가리킬지, 직접 보관할지) 정한다([ADR-0021](adr/0021-glibc-distroless-image.md), [research/0006](research/0006-license.md) "glibc 동적 이미지의 배포 의무").
 
 ## Phase 5: 보안 강화 + 성능 보강 + proto 회고
 
@@ -128,5 +130,16 @@ Phase 5까지 하지 않은 검증을 메운다(결정자 지시, 2026-10-30). �
 - [x] javadoc 생성을 평소 단위 테스트에 묶는다. — `./gradlew :client-jvm:test`가 javadoc 태스크도 돌린다. 그 전에 javadoc 태스크가 생성된 proto 클래스를 찾지 못해 실패하던 문제를 고쳤다(`--patch-module`)
 - [x] module path + HTTP 프록시(CONNECT) 경로를 시험한다. — 실패(`HttpProxyHandler` 클래스 없음)를 찾아 고쳤다(`io.netty.handler.proxy` 모듈 의존성). 테스트: `SpiRegistrationTest`(로컬 CONNECT 프록시)
 - [x] 인코딩 경로(Encode, EncodeAnimation) 퍼저를 더하고 libwebp까지 포함한 커버리지를 잰다. — 대상 2개 × 30분, 실패 0건. 커버리지 표와 미실행 영역 해석: [research/0010](research/0010-server-fuzzing.md)
-- [x] 사진 alpha 격차(ADR-0011 남은 미달 2건)의 원인을 좁힌다. — **원인 둘을 찾았다.** libwebp 1.6.0의 `DispatchAlpha_SSE2` 변경(upstream `44f91b0ddd07`, M 기준 약 0.98 ms)과 musl 할당자(M 기준 약 0.84 ms). upstream에는 보고하지 않고 내부 기록으로 둔다. 서버 빌드 패치도 ADR로 만들지 않고, 패치를 제안할 때 볼 고려 사항만 남긴다(결정자, 2026-11-02). 기반 이미지 변경은 결정 후보다: [research/0013](research/0013-alpha-decode-gap.md)
+- [x] 사진 alpha 격차(ADR-0011 남은 미달 2건)의 원인을 좁힌다. — **원인 둘을 찾았다.** libwebp 1.6.0의 `DispatchAlpha_SSE2` 변경(upstream `44f91b0ddd07`, M 기준 약 0.98 ms)과 musl 할당자(M 기준 약 0.84 ms). upstream에는 보고하지 않고 내부 기록으로 둔다. 서버 빌드 패치도 ADR로 만들지 않고, 패치를 제안할 때 볼 고려 사항만 남긴다(결정자, 2026-11-02). 기반 이미지 변경은 결정 후보다: [research/0013](research/0013-alpha-decode-gap.md). → [ADR-0021](adr/0021-glibc-distroless-image.md)로 결정했다(아래 "glibc 서버 이미지")
 - [x] 측정 범위를 넓힌다: 첫 호출 지연, 할당량·GC, 연결 1개 대 3개, 60분 섞인 부하와 서버 메모리 추이. — 60분 동안 메모리 증가 없음, 처리량 일정, 실패는 혼잡 거부(2.5%)뿐: [research/0014](research/0014-load-soak.md)
+
+## glibc 서버 이미지 (ADR-0021, 2026-11-02 – 2026-11-03)
+
+research/0013이 찾은 원인 2(musl 할당자)에 대한 결정이다(결정자 지시, 2026-11-02: ADR을 쓰고 관련 작업을 모두 포함해 확정한 뒤 코드에 반영한다). 확인 결과: [research/0015](research/0015-glibc-image-verification.md).
+
+- [x] ADR-0021(glibc 동적 + `gcr.io/distroless/cc-debian13:nonroot`)을 쓰고, 서버 이미지와 라이선스 고지(`BASE-IMAGE-PACKAGES.tsv`)를 바꾼다. — ADR-0012는 "이미지 / libc" 항목만 대체한다. 대응 소스 제공 방식은 "첫 배포 전 결정"으로 넘겼다
+- [x] seccomp 허용 목록을 glibc 바이너리 기준으로 다시 수집한다. — 55개 → 61개. verify-hardening 23개, 통합 테스트 23개 통과
+- [x] 측정 도구를 서버와 같은 할당자·출력 경로로 맞춘다. — `bench/run.sh` 서버 디코딩 시간 단계를 glibc 타깃 + 출력 버퍼 재사용으로 고쳤다. 비교 도구는 `bench/glibc-check/`
+- [x] ADR-0011을 다시 판정한다. — **18/18 충족**(사진 alpha M 0.56, L 0.54)
+- [x] 메모리를 확인한다(ADR-0016 조합, 60분 부하, 부하 뒤 유휴 반환). — glibc 기본값은 유휴 메모리가 돌아오지 않아(78–176 MiB) 할당자 설정 두 가지를 더했다: 유휴 `malloc_trim`(서버 코드)과 `MALLOC_ARENA_MAX=2`(이미지). 유휴 60초 뒤 2.3 MiB, OOM 0건. 대가는 섞인 부하 처리량 약 3%다(결정자 수용, 2026-11-03)
+- [x] ADR-0021 확정. — **확정**(accepted, 결정자 2026-11-03)

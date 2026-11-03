@@ -66,7 +66,7 @@ docs/
 | [0009](adr/0009-license.md) | 프로젝트 라이선스: Apache-2.0 | accepted |
 | [0010](adr/0010-maven-coordinates.md) | Maven 좌표: `net.rivergod:webp-imageio-external-server-proto` | accepted |
 | [0011](adr/0011-hypothesis-criteria.md) | 가설 판정 기준: 디코딩 처리량 TwelveMonkeys 3배 이상, JNI 50% 이상 | accepted |
-| [0012](adr/0012-server-runtime-config.md) | 서버 실행 구성: 이름, 설정, 상한 기본값, 동시 처리, 컨테이너, 소켓 | accepted |
+| [0012](adr/0012-server-runtime-config.md) | 서버 실행 구성: 이름, 설정, 상한 기본값, 동시 처리, 컨테이너, 소켓 | accepted("이미지 / libc"만 0021로 대체) |
 | [0013](adr/0013-client-package-and-imageio-mapping.md) | 클라이언트 패키지와 ImageIO 매핑 | accepted |
 | [0014](adr/0014-animation-and-metadata-mapping.md) | 애니메이션·메타데이터 매핑 | accepted |
 | [0015](adr/0015-benchmark-method.md) | 벤치마크 방법: 환경, 샘플, SIMD 빌드, Wasm 비교 구현 | accepted |
@@ -75,7 +75,7 @@ docs/
 | [0018](adr/0018-decode-output-buffer-pool.md) | 정지 이미지 디코딩 출력 버퍼 재사용(버퍼 풀)과 만료 정책 | accepted |
 | [0019](adr/0019-prototype-retrospective.md) | 프로토타입 회고: 사이드카 구조를 계속한다(proto `webp.v1` 유지) | accepted |
 | [0020](adr/0020-imageio-config-injection.md) | ImageIO 플러그인 설정을 코드로 넘기는 방법 | accepted |
-| [0021](adr/0021-glibc-distroless-image.md) | 서버 이미지를 glibc 동적 바이너리 + distroless/cc로 바꾼다 | proposed |
+| [0021](adr/0021-glibc-distroless-image.md) | 서버 이미지를 glibc 동적 바이너리 + distroless/cc로 바꾼다(유휴 trim, arena 2개) | accepted |
 
 ### 조사
 
@@ -93,6 +93,7 @@ docs/
 - [research/0012-gif-conversion-load.md](research/0012-gif-conversion-load.md) — GIF → WebP 변환 단건·동시 부하, HTTP/2 흐름 제어 교착 발견
 - [research/0013-alpha-decode-gap.md](research/0013-alpha-decode-gap.md) — 사진 alpha 디코딩 격차의 원인(libwebp 1.6.0 `DispatchAlpha_SSE2`, musl 할당자)
 - [research/0014-load-soak.md](research/0014-load-soak.md) — 첫 호출 지연, 할당량, 연결 수, 60분 섞인 부하와 서버 메모리
+- [research/0015-glibc-image-verification.md](research/0015-glibc-image-verification.md) — glibc 서버 이미지(ADR-0021) 확인: ADR-0011 재판정, page fault, 메모리, 유휴 반환과 할당자 설정
 
 ### 작업 규칙
 
