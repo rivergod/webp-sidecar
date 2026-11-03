@@ -12,7 +12,7 @@
 | Phase 5 | 보안 강화(seccomp, 퍼징) + 성능 보강 + proto 회고 | 완료 (2026-10-29). 사이드카 구조로 확정(ADR-0019), 버퍼 풀 확정(ADR-0018), 작업량 상한 확정·구현(ADR-0017), 메모리 예산 확정·구현(ADR-0016), 설정 주입 확정(ADR-0020, 2026-10-30) |
 | 검증 보강 | javadoc·프록시 경로 시험, 인코딩 퍼징·커버리지, alpha 격차 원인, 장시간·섞인 부하 | 완료 (2026-10-30). 대응 결정은 후보로 넘김(research/0013, 0014) |
 | glibc 서버 이미지 | 서버 이미지를 glibc 동적 + distroless/cc로 바꾸고(ADR-0021) 확인한다 | 완료 (2026-11-03). ADR-0021 확정, ADR-0011 18/18 충족 |
-| 이름 변경 | 프로젝트 이름을 `webp-sidecar`로 바꾸고 구성 요소 이름(패키지, artifactId, 서버·이미지, 소켓 경로, 설정 키)을 맞춘다(ADR-0022) | 완료 (2026-11-03). 기록 문서(확정 ADR 본문, research, bench/results)는 옛 이름 그대로 |
+| 이름 변경 | 프로젝트 이름을 `webp-sidecar`로 바꾸고 구성 요소 이름(패키지, artifactId, 서버·이미지, 소켓 경로, 설정 키)을 맞춘다(ADR-0022) | 완료 (2026-11-03). 기록 문서(확정 ADR 본문, research, bench/results)는 옛 이름 그대로. 같은 날 Git 이력을 다시 써서(결정자 지시) 모든 커밋 해시가 바뀌었다. 문서와 측정 결과의 해시 인용은 새 해시로 고쳤다 |
 
 ## Phase 0: 기반 정리
 
@@ -94,7 +94,7 @@
 
 - [ ] 저작권자 표기(개인/조직)와 `NOTICE` 파일([ADR-0009](adr/0009-license.md))
 - [ ] 원격 저장소 위치·공개 여부와 CI
-- [ ] Maven Central 배포 여부. 배포하면 `rivergod.net`에 DNS TXT 레코드로 namespace를 확인받아야 한다([ADR-0010](adr/0010-maven-coordinates.md)).
+- [ ] Maven Central 배포 여부. 배포하면 `rivergod.net`에 DNS TXT 레코드로 namespace를 확인받아야 한다([ADR-0010](adr/0010-maven-coordinates.md)). 도메인 소유는 확인하지 않았다(미확인).
 - [ ] 서버 이미지의 대응 소스 제공 방식. glibc·libgcc 등 LGPL/GPL 패키지 바이너리를 함께 배포하므로 소스를 어떻게 제공할지(snapshot.debian.org를 가리킬지, 직접 보관할지) 정한다([ADR-0021](adr/0021-glibc-distroless-image.md), [research/0006](research/0006-license.md) "glibc 동적 이미지의 배포 의무").
 
 ## Phase 5: 보안 강화 + 성능 보강 + proto 회고

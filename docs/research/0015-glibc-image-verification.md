@@ -29,14 +29,14 @@
 
 | 항목 | 값 |
 |---|---|
-| glibc 이미지(할당자 기본값) | `webp-imageio-server:dev` sha256 `fbdcf581…`(기본 SSE2), AVX2 빌드 `9a0b1ba6…`. 커밋 `2ad7555`의 deploy/Dockerfile. JMH, 서버 디코딩 시간, 메모리 조합, 60분 부하, page fault(musl 비교), "glibc 기본값" 데우기에 썼다 |
+| glibc 이미지(할당자 기본값) | `webp-imageio-server:dev` sha256 `fbdcf581…`(기본 SSE2), AVX2 빌드 `9a0b1ba6…`. 커밋 `8f12122`의 deploy/Dockerfile. JMH, 서버 디코딩 시간, 메모리 조합, 60분 부하, page fault(musl 비교), "glibc 기본값" 데우기에 썼다 |
 | glibc 이미지(유휴 trim) | `69aba94b…`, 다시 빌드한 `b8257976…`(레이어가 같다. 서버 바이너리 sha256 `bf662978…`). arena는 기본값이다. "유휴 trim" 데우기, 유휴 시험, page fault(arena 비교)에 썼다 |
 | glibc 이미지(최종) | 유휴 trim + `MALLOC_ARENA_MAX=2`. 데우기와 page fault는 `b8257976…`에 환경변수만 더한 `01f53522…`로 쟀다. JMH 일부, 격리 확인, 통합 테스트는 deploy/Dockerfile로 만든 `c8ffaa87…`로 쟀다. 두 이미지는 레이어와 환경변수가 같다 |
 | musl 비교 이미지 | `webp-imageio-server:musl-baseline` sha256 `7001fdc9…`(ADR-0012 구성: musl 정적 + `scratch`). research/0014가 쓴 이미지와 같다. 요청당 page fault 측정에만 썼고, seccomp는 main의 musl용 프로파일을 걸었다 |
 | 다른 날 비교 기준 | Phase 5 JMH와 디코딩 시간([bench/results/2026-10-29-phase5/](../../bench/results/2026-10-29-phase5/), musl), research/0014 60분 부하(2026-10-30, musl), research/0007 메모리 조합(2026-10-29, musl) |
 | 호스트 | Intel Core i9-14900, Ubuntu 26.04.1, 커널 7.0.0-42, Docker 29.1.3, runc 1.4.0, OpenJDK 25.0.5 |
 | CPU 고정 | JVM 0·2·4·6, 서버 12·14(`--cpus 2`, `--memory 1g`). 서버 안 디코딩 시간은 CPU 12 |
-| 커밋 | JMH·부하 `6940866`. 부하 측정의 "(dirty)"는 문서 편집(`docs/roadmap.md`, `docs/research/0013`)이다. 할당자 설정 측정(2026-11-03)은 `7d7b402`에 작업 트리의 서버 변경(유휴 trim)을 더한 상태이고, 그 변경은 이 문서와 같은 브랜치에 커밋했다 |
+| 커밋 | JMH·부하 `d1070d5`. 부하 측정의 "(dirty)"는 문서 편집(`docs/roadmap.md`, `docs/research/0013`)이다. 할당자 설정 측정(2026-11-03)은 `f02d671`에 작업 트리의 서버 변경(유휴 trim)을 더한 상태이고, 그 변경은 이 문서와 같은 브랜치에 커밋했다 |
 
 ## 이미지와 격리
 
@@ -335,8 +335,8 @@ BENCH_RESULTS=bench/results/<이름>-soak bench/soak.sh soak 60 3 4
 # 아래는 bench/glibc-check/(사진 세트와 ./gradlew :bench:installBench가 먼저 있어야 한다)
 bench/glibc-check/rounds.sh bench/results/<이름>/libc-rounds.tsv 3 100
 
-# musl 비교 이미지: ADR-0021 이전 main(9cfd31f)의 Dockerfile과 seccomp 프로파일
-git worktree add /tmp/webp-musl 9cfd31f
+# musl 비교 이미지: ADR-0021 이전 main(e1acda5)의 Dockerfile과 seccomp 프로파일
+git worktree add /tmp/webp-musl e1acda5
 docker build -f /tmp/webp-musl/deploy/Dockerfile -t webp-imageio-server:musl-baseline /tmp/webp-musl
 bench/glibc-check/faults.sh bench/results/<이름>/faults.tsv \
   "musl=webp-imageio-server:musl-baseline=/tmp/webp-musl/deploy/seccomp/webp-imageio-server.json" \
@@ -348,7 +348,7 @@ EXTRA_DOCKER_ARGS="-e MALLOC_ARENA_MAX=1" bench/glibc-check/idle-probe.sh bench/
 
 할당자 설정별 이미지:
 
-- glibc 기본값(trim 없음): ADR-0021 첫 구현 커밋 `2ad7555`의 deploy/Dockerfile로 만든다.
+- glibc 기본값(trim 없음): ADR-0021 첫 구현 커밋 `8f12122`의 deploy/Dockerfile로 만든다.
 - 유휴 trim, arena 기본값: 지금 deploy/Dockerfile에서 `ENV MALLOC_ARENA_MAX=2` 줄을 지우고 만든다.
 - 최종(trim + arena 2개): 지금 deploy/Dockerfile 그대로 만든다.
 

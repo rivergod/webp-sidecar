@@ -1,4 +1,4 @@
-# server/scripts/measure-memory.sh 1g 2 8192; server/scripts/measure-memory.sh 1g 2 4096 (2026-11-02). 이미지: 커밋 2ad7555와 같은 deploy/Dockerfile·서버 코드로 커밋 전에 빌드한 glibc 이미지(ADR-0021)
+# server/scripts/measure-memory.sh 1g 2 8192; server/scripts/measure-memory.sh 1g 2 4096 (2026-11-02). 이미지: 커밋 8f12122와 같은 deploy/Dockerfile·서버 코드로 커밋 전에 빌드한 glibc 이미지(ADR-0021)
 op	side	concurrent	mem_limit	peak_mib	oom_killed	result
 decode-lossless	8192	2	1g	296	false	ok
 decode-lossy	8192	2	1g	337	false	ok

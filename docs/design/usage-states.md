@@ -161,7 +161,7 @@ stateDiagram-v2
 | 플러그인(SPI, 입력 판별, 설정 우선순위, RPC 순서, 재시도, 데드라인) | `client-jvm/src/main/java/net/rivergod/webp/sidecar/`(`WebPImageReaderSpi`, `WebPImageReader`, `WebPImageWriter`, `WebPClient`, `StreamingCall`, `AnimationStream`, `GrpcErrors`, `ClientConfig`), [ADR-0013](../adr/0013-client-package-and-imageio-mapping.md), [ADR-0014](../adr/0014-animation-and-metadata-mapping.md), [ADR-0020](../adr/0020-imageio-config-injection.md) |
 | 컨테이너(seccomp EPERM, 메모리 제한, 소켓 권한·경로 길이, 재시작 정책) | [deploy/README.md](../../deploy/README.md), `deploy/compose.yaml` |
 
-확인 날짜: 2026-11-03(커밋 `5d5ce60` 기준). 코드를 바꿔 상태나 전이가 달라지면 이 그림을 같은 커밋에서 고친다.
+확인 날짜: 2026-11-03(커밋 `800cf9e` 기준). 코드를 바꿔 상태나 전이가 달라지면 이 그림을 같은 커밋에서 고친다.
 
 ## 그림에 없는 것, 정해지지 않은 것
 
