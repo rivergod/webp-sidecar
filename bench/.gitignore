@@ -8,3 +8,6 @@ results/**/*.txt
 !results/**/alloc*.txt
 !results/**/compare*.txt
 !results/**/soak*.txt
+# bench/glibc-check/의 warm-worst.sh(warm.txt, warm-<n>.txt)와 idle-probe.sh(idle.txt, idle-load-<n>.txt) 출력은 요약 줄만 담는다(docs/research/0015).
+!results/**/warm*.txt
+!results/**/idle*.txt

@@ -45,6 +45,8 @@ libwebp alpha 디코딩 시간을 서버 빌드(musl·glibc, SSE2·AVX2)와 libw
 bench/libwebp-alpha/run.sh
 ```
 
+glibc 서버 이미지([ADR-0021](../docs/adr/0021-glibc-distroless-image.md))를 musl 이미지와 비교·확인한 도구는 [glibc-check/](glibc-check/)에 있다(결과: [research/0015](../docs/research/0015-glibc-image-verification.md)). 서버 libwebp 디코딩 시간 바퀴 비교(`rounds.sh`, 약 25분), Decode RPC 1회당 page fault(`faults.sh`, 이미지당 약 2분), 데운 컨테이너의 유휴 반환과 최악 조합(`warm-worst.sh`, 데우기 20분 + 약 5분), 짧은 부하 뒤 유휴 메모리가 남는 매핑(`idle-probe.sh`, 약 2분), 이미지별 JMH 일부(`jmh-subset.sh`, 이미지당 약 3분)다. 사용법은 각 스크립트 머리 주석에 있다.
+
 ## 구성
 
 | 경로 | 내용 |
