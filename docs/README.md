@@ -49,6 +49,7 @@ docs/
 - [design/goals-and-constraints.md](design/goals-and-constraints.md) — 목표, 비목표, 핵심 설계 제약
 - [design/grpc-api.md](design/grpc-api.md) — gRPC API(`webp.v1`): 스트리밍 규칙, 상한, 오류 매핑, 클라이언트 설정
 - [design/imageio-metadata.md](design/imageio-metadata.md) — ImageIO 메타데이터 포맷, 애니메이션 읽기·쓰기 매핑
+- [design/usage-states.md](design/usage-states.md) — 사용 흐름 상태도: 서버 생명주기와 읽기·쓰기 연산 하나의 상태·전이·주체(mermaid)
 
 ### ADR
 
