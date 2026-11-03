@@ -1,8 +1,8 @@
 # 0006. 라이선스 후보와 의존성 호환성
 
 - 상태: 초안
-- 작성일/확인일: 2026-10-23
-- 관련 ADR: ADR-0009, ADR-0010
+- 작성일/확인일: 2026-10-23, 보강 2026-11-02(glibc 동적 이미지, ADR-0021)
+- 관련 ADR: ADR-0009, ADR-0010, ADR-0021
 
 > 법률 자문이 아니다. 공개 문서와 패키지 메타데이터로 확인한 사실과 일반적인 해석을 정리했다.
 
@@ -90,12 +90,53 @@ shading하지 않으므로 이 jar는 의존성 코드를 담지 않는다. 사�
 - 도메인이 없으면 GitHub 가입 계정 기준의 `io.github.<사용자명>` namespace를 받을 수 있다. 조직 이름은 지원하지 않는다 [S8].
 - Maven Central에 배포하지 않으면(로컬 저장소, 사내 저장소, GitHub Packages 등) 이 확인은 필요 없다.
 
+## glibc 동적 이미지의 배포 의무 (확인 2026-11-02, ADR-0021)
+
+서버 이미지를 musl 정적 + `scratch`에서 glibc 동적 + `gcr.io/distroless/cc-debian13:nonroot`로 바꾸는 경우를 다룬다. 프로젝트 라이선스(Apache-2.0)는 바뀌지 않는다. 위 "glibc를 정적 링크하지 않는다" 조건도 그대로 지킨다(동적 링크). 바뀌는 것은 **이미지가 Debian 패키지 바이너리를 함께 배포한다**는 점이다.
+
+### 이미지에 들어가는 베이스 패키지
+
+`gcr.io/distroless/cc-debian13:nonroot`(index digest `sha256:08476c244888bfb425bae1ae4dd7c17f093e972aab8426883d97f3c6f280f7c1`)의 dpkg 상태(`/var/lib/dpkg/status.d/`)와 패키지별 `/usr/share/doc/<패키지>/copyright`를 이미지에서 꺼내 확인했다 [S9].
+
+| 패키지 | 버전 | 소스 패키지 | 주 라이선스(copyright 파일) | 서버가 쓰는가 |
+|---|---|---|---|---|
+| libc6 | 2.41-12+deb13u4 | glibc | LGPL-2.1+ (일부 파일 BSD 계열 등) | 쓴다(`libc.so.6`, `libm.so.6`, `ld-linux-x86-64.so.2`) |
+| libgcc-s1 | 14.2.0-19 | gcc-14 | GPL-3+ + GCC Runtime Library Exception 3.1 | 쓴다(`libgcc_s.so.1`, Rust 언와인딩) |
+| gcc-14-base | 14.2.0-19 | gcc-14 | (libgcc-s1과 같은 copyright) | 문서만 |
+| libstdc++6, libgomp1 | 14.2.0-19 | gcc-14 | GPL-3+ + GCC Runtime Library Exception 3.1 | 쓰지 않는다 |
+| libssl3t64 | 3.5.7-1~deb13u3 | openssl | Apache-2.0 | 쓰지 않는다 |
+| libzstd1 | 1.5.7+dfsg-1 | libzstd | BSD-3-clause 또는 GPL-2 | 쓰지 않는다 |
+| zlib1g | 1:1.3.dfsg+really1.3.1-1+b1 | zlib(1:1.3.dfsg+really1.3.1-1) | Zlib | 쓰지 않는다 |
+| base-files | 13.8+deb13u7 | base-files | GPL-2+ | 데이터 파일(`/etc/os-release` 등, `/usr/share/common-licenses`) |
+| netbase | 6.5 | netbase | GPL-2 | 데이터 파일 |
+| ca-certificates | 20250419+deb13u1 | ca-certificates | GPL-2+(스크립트), MPL-2.0(인증서 데이터) | 쓰지 않는다 |
+| tzdata, tzdata-legacy | 2026f-0+deb13u1 | tzdata | public-domain | 쓰지 않는다 |
+| media-types | 13.0.0 | media-types | ad-hoc | 쓰지 않는다 |
+
+- 서버 바이너리가 동적 링크하는 것은 `libgcc_s.so.1`, `libm.so.6`, `libc.so.6`, `ld-linux-x86-64.so.2` 넷이다(`readelf -d`, 요구 심볼 버전은 `GLIBC_2.34`까지).
+- 라이선스 전문은 이미지 안에 있다. copyright 파일이 가리키는 `/usr/share/common-licenses/`(LGPL-2.1, GPL-2, GPL-3 등)를 base-files가 담는다.
+- `gcr.io/distroless/base-nossl-debian13`에는 libc6만 있고 libgcc-s1이 없다. 서버는 `libgcc_s.so.1`이 필요하다. distroless의 Rust 예제도 `cc-debian13`을 쓴다 [S10].
+
+### 배포할 때의 의무 (일반적 해석, 법률 판단은 첫 배포 전에 받는다)
+
+| 의무 | 대상 | 지금 상태 |
+|---|---|---|
+| 라이선스 전문과 저작권 고지를 함께 준다 | 모든 패키지 | 충족. 이미지 안 `/usr/share/doc/*/copyright`와 `/usr/share/common-licenses/` |
+| 대응 소스를 제공한다(LGPL-2.1 §4·§6, GPL-2 §3, GPL-3 §6) | libc6(glibc), libgcc-s1·libstdc++6·libgomp1(gcc-14), base-files, netbase, ca-certificates | **미정.** 정확한 소스 패키지와 버전을 이미지의 `/licenses/BASE-IMAGE-PACKAGES.tsv`에 남긴다. 소스는 `https://snapshot.debian.org/package/<소스>/<소스 버전>/`(URL 인코딩: `+` → `%2B`, `:` → `%3A`)에서 받을 수 있다(glibc 2.41-12+deb13u4, zlib 1:1.3.dfsg+really1.3.1-1 응답 200 확인) [S11]. 제3자 서버를 가리키는 것으로 충분한지, 서면 제공 약속이나 직접 보관이 필요한지는 해석이 갈린다(미확인) |
+| 사용자가 LGPL 라이브러리를 바꿔 끼울 수 있게 한다(LGPL-2.1 §6) | glibc | 충족한다고 본다(추정). 동적 링크라 이미지의 `libc.so.6`을 바꿀 수 있다. 프로젝트 라이선스(Apache-2.0)는 수정과 그 디버깅을 위한 리버스 엔지니어링을 막지 않는다 |
+| GCC Runtime Library Exception의 조건 | libgcc_s를 쓰는 서버 바이너리 | 충족한다고 본다(추정). 일반 GCC로 컴파일했고("Eligible Compilation Process") 서버 코드를 GPL로 낼 의무가 생기지 않는다 |
+
+- 위 의무는 이미지를 **외부에 배포할 때** 생긴다. 배포 결정(저작권자, 공개 위치, 배포 여부)은 로드맵 "첫 배포 전 결정"에 있다. 소스 제공 방식도 그때 정한다.
+- 쓰지 않는 패키지(libssl3t64, libstdc++6 등)도 이미지에 있으면 배포 대상이다. 이 패키지들은 베이스 이미지가 정한 구성이라 따로 빼지 않는다(ADR-0021).
+- Rust 크레이트 고지(`cargo-about`, `THIRD-PARTY-NOTICES.txt`)는 OS 패키지를 다루지 않는다. 그래서 이미지 빌드가 베이스 이미지의 dpkg 상태에서 패키지 목록(`BASE-IMAGE-PACKAGES.tsv`)을 따로 만든다(`deploy/Dockerfile`).
+
 ## 미확인 항목
 
 - 서버 전이 의존성 전체의 라이선스(서버 `Cargo.toml` 작성 후 확인).
 - prost 등 Apache-2.0 크레이트의 `NOTICE` 파일 유무.
 - MPL-2.0, EPL-2.0, LGPL과 현재 의존성의 조합별 호환성(위 표의 "추정").
 - 저작권자(개인/조직)와 업무 관련성.
+- glibc 이미지의 대응 소스 제공 방식(snapshot.debian.org를 가리키는 것으로 충분한지). 첫 배포 전에 정한다.
 
 ## 출처
 
@@ -107,3 +148,6 @@ shading하지 않으므로 이 jar는 의존성 코드를 담지 않는다. 사�
 - [S6] musl `COPYRIGHT` — https://git.musl-libc.org/cgit/musl/plain/COPYRIGHT (확인 2026-10-23)
 - [S7] glibc `COPYING.LIB` — https://sourceware.org/git/?p=glibc.git;a=blob_plain;f=COPYING.LIB;hb=HEAD (확인 2026-10-23)
 - [S8] Sonatype Central, "Register a Namespace" — https://central.sonatype.org/register/namespace/ (확인 2026-10-23)
+- [S9] `gcr.io/distroless/cc-debian13:nonroot` index digest `sha256:08476c244888bfb425bae1ae4dd7c17f093e972aab8426883d97f3c6f280f7c1`(linux/amd64 manifest `sha256:65af2e9e44e71de2df28245f6814301775d3ef04436b7d563f240d86fedf24aa`)을 `docker export`로 꺼내 `/var/lib/dpkg/status.d/`, `/usr/share/doc/*/copyright`, `/usr/share/common-licenses/`를 확인했다 (확인 2026-11-02)
+- [S10] distroless `README.md`("Distroless images are based on Debian 13 (trixie)"), `examples/rust/Dockerfile`(런타임 `gcr.io/distroless/cc-debian13`) — https://github.com/GoogleContainerTools/distroless (확인 2026-11-02)
+- [S11] Debian snapshot archive — https://snapshot.debian.org/package/glibc/2.41-12%2Bdeb13u4/ (확인 2026-11-02)

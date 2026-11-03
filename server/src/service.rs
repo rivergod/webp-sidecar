@@ -6,8 +6,8 @@
 //! - 요청마다 추정 메모리를 예산에서 예약한다(ADR-0016, docs/design/grpc-api.md §3.3).
 
 use crate::admission::{
-    Admission, DeadlineStream, MemoryReservation, RequestPolicy, Sent, Slot, blocking_send_until, deadline_exceeded,
-    send_until,
+    Activity, Admission, DeadlineStream, MemoryReservation, RequestPolicy, Sent, Slot, blocking_send_until,
+    deadline_exceeded, send_until,
 };
 use crate::config::Limits;
 use crate::pool::{BufferPool, PoolConfig};
@@ -68,6 +68,11 @@ impl WebpService {
             admission: Arc::new(Admission::new(max_concurrency, policy, pool.config().max_bytes)),
             pool,
         }
+    }
+
+    /// 지금의 활동 상태([`Admission::activity`]). 유휴 힙 반환(ADR-0021, [`crate::heap::IdleTrim`])이 쓴다.
+    pub fn activity(&self) -> Activity {
+        self.admission.activity()
     }
 }
 

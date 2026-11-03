@@ -121,7 +121,7 @@ sequenceDiagram
 | `--max-chunk-bytes` | `WEBP_SERVER_MAX_CHUNK_BYTES` | `1048576` (1 MiB) | `Limits.max_chunk_bytes` |
 | `--max-concurrency` | `WEBP_SERVER_MAX_CONCURRENCY` | `2` | 동시에 libwebp 작업을 하는 요청 수 |
 | `--buffer-pool-bytes` | `WEBP_SERVER_BUFFER_POOL_BYTES` | `134217728` (128 MiB) | 정지 이미지 출력 버퍼 풀 총량 상한, 0이면 끔([ADR-0018](../adr/0018-decode-output-buffer-pool.md)) |
-| `--buffer-pool-idle-ms` | `WEBP_SERVER_BUFFER_POOL_IDLE_MS` | `30000` | 풀 버퍼 유휴 만료(ADR-0018) |
+| `--buffer-pool-idle-ms` | `WEBP_SERVER_BUFFER_POOL_IDLE_MS` | `30000` | 풀 버퍼 유휴 만료(ADR-0018). 서버는 이 값의 절반 주기로 만료된 버퍼를 놓고, 유휴로 접어들면 glibc 힙의 빈 페이지도 돌려준다(`malloc_trim`, [ADR-0021](../adr/0021-glibc-distroless-image.md)) |
 | `--max-composited-pixels` | `WEBP_SERVER_MAX_COMPOSITED_PIXELS` | `1073741824` (2^30) | `Limits.max_composited_pixels`. 요청 하나의 합성 픽셀 수(캔버스 × 프레임) 상한([ADR-0017](../adr/0017-output-volume-limits.md)) |
 | `--max-request-ms` | `WEBP_SERVER_MAX_REQUEST_MS` | `60000` | 슬롯을 잡은 뒤 요청 하나의 시간 상한(ADR-0017) |
 | `--max-queued-requests` | `WEBP_SERVER_MAX_QUEUED_REQUESTS` | `8` | 메모리나 슬롯을 기다릴 수 있는 요청 수, 0이면 상한 없음(ADR-0017) |

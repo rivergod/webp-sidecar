@@ -1,13 +1,14 @@
 //! libwebp를 링크한 WebP gRPC 사이드카 서버(`webp.v1`).
 //!
 //! - 계약: proto/webp/v1, 설명은 docs/design/grpc-api.md
-//! - 구성: [`config`](설정 해석), [`webp`](libwebp FFI 경계, `unsafe`는 여기에만), [`pool`](출력 버퍼 풀),
-//!   [`service`](gRPC 서비스)
+//! - 구성: [`config`](설정 해석), [`webp`](libwebp FFI 경계, `unsafe`는 여기와 [`heap`]의 `malloc_trim` 한 줄에만),
+//!   [`pool`](출력 버퍼 풀), [`heap`](유휴 힙 반환), [`service`](gRPC 서비스)
 #![warn(missing_docs)]
 #![warn(clippy::undocumented_unsafe_blocks)]
 
 pub mod admission;
 pub mod config;
+pub mod heap;
 pub mod pool;
 pub mod service;
 pub mod webp;

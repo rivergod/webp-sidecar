@@ -1,0 +1,28 @@
+interval t_s=60 ops=1415 ops_per_s=23.58 errors={read_L_lossy:BUSY=4, read_M_lossy:BUSY=4, read_anim_all:BUSY=3, write_M_lossy:BUSY=3, write_M_lossless:BUSY=3, read_M_alpha:BUSY=5, read_M_lossless:BUSY=4}
+interval t_s=120 ops=2777 ops_per_s=22.70 errors={read_L_lossy:BUSY=5, read_M_lossy:BUSY=11, read_anim_all:BUSY=5, write_M_lossy:BUSY=5, write_M_lossless:BUSY=4, read_M_alpha:BUSY=10, read_M_lossless:BUSY=9}
+interval t_s=180 ops=4060 ops_per_s=21.38 errors={read_L_lossy:BUSY=8, read_M_lossy:BUSY=21, read_anim_all:BUSY=8, write_M_lossy:BUSY=10, write_M_lossless:BUSY=4, read_M_alpha:BUSY=16, read_M_lossless:BUSY=15}
+interval t_s=240 ops=5362 ops_per_s=21.70 errors={read_L_lossy:BUSY=16, read_M_lossy:BUSY=36, read_anim_all:BUSY=12, write_M_lossy:BUSY=11, write_M_lossless:BUSY=7, read_M_alpha:BUSY=23, read_M_lossless:BUSY=19}
+interval t_s=300 ops=6703 ops_per_s=22.35 errors={read_L_lossy:BUSY=20, read_M_lossy:BUSY=43, read_anim_all:BUSY=13, write_M_lossy:BUSY=19, write_M_lossless:BUSY=10, read_M_alpha:BUSY=31, read_M_lossless:BUSY=19}
+interval t_s=360 ops=7976 ops_per_s=21.22 errors={read_L_lossy:BUSY=23, read_M_lossy:BUSY=53, read_anim_all:BUSY=23, write_M_lossy:BUSY=23, write_M_lossless:BUSY=11, read_M_alpha:BUSY=47, read_M_lossless:BUSY=23}
+interval t_s=420 ops=9285 ops_per_s=21.82 errors={read_L_lossy:BUSY=25, read_M_lossy:BUSY=68, read_anim_all:BUSY=25, write_M_lossy:BUSY=27, write_M_lossless:BUSY=14, read_M_alpha:BUSY=53, read_M_lossless:BUSY=27}
+interval t_s=480 ops=10592 ops_per_s=21.78 errors={read_L_lossy:BUSY=27, read_M_lossy:BUSY=77, read_anim_all:BUSY=28, write_M_lossy:BUSY=28, write_M_lossless:BUSY=15, read_M_alpha:BUSY=58, read_M_lossless:BUSY=29}
+interval t_s=540 ops=11972 ops_per_s=23.00 errors={read_L_lossy:BUSY=30, read_M_lossy:BUSY=88, read_anim_all:BUSY=29, write_M_lossy:BUSY=32, write_M_lossless:BUSY=18, read_M_alpha:BUSY=64, read_M_lossless:BUSY=34}
+interval t_s=600 ops=13261 ops_per_s=21.48 errors={read_L_lossy:BUSY=34, read_M_lossy:BUSY=99, read_anim_all:BUSY=35, write_M_lossy:BUSY=35, write_M_lossless:BUSY=20, read_M_alpha:BUSY=76, read_M_lossless:BUSY=39}
+interval t_s=660 ops=14616 ops_per_s=22.58 errors={read_L_lossy:BUSY=36, read_M_lossy:BUSY=106, read_anim_all:BUSY=40, write_M_lossy:BUSY=43, write_M_lossless:BUSY=20, read_M_alpha:BUSY=83, read_M_lossless:BUSY=44}
+interval t_s=720 ops=15987 ops_per_s=22.85 errors={read_L_lossy:BUSY=42, read_M_lossy:BUSY=116, read_anim_all:BUSY=41, write_M_lossy:BUSY=47, write_M_lossless:BUSY=21, read_M_alpha:BUSY=85, read_M_lossless:BUSY=45}
+interval t_s=780 ops=17305 ops_per_s=21.97 errors={read_L_lossy:BUSY=49, read_M_lossy:BUSY=133, read_anim_all:BUSY=45, write_M_lossy:BUSY=48, write_M_lossless:BUSY=24, read_M_alpha:BUSY=93, read_M_lossless:BUSY=48}
+interval t_s=840 ops=18687 ops_per_s=23.03 errors={read_L_lossy:BUSY=51, read_M_lossy:BUSY=144, read_anim_all:BUSY=49, write_M_lossy:BUSY=53, write_M_lossless:BUSY=26, read_M_alpha:BUSY=101, read_M_lossless:BUSY=50}
+interval t_s=900 ops=19977 ops_per_s=21.50 errors={read_L_lossy:BUSY=56, read_M_lossy:BUSY=153, read_anim_all:BUSY=54, write_M_lossy:BUSY=59, write_M_lossless:BUSY=29, read_M_alpha:BUSY=114, read_M_lossless:BUSY=54}
+interval t_s=960 ops=21366 ops_per_s=23.15 errors={read_L_lossy:BUSY=61, read_M_lossy:BUSY=161, read_anim_all:BUSY=58, write_M_lossy:BUSY=62, write_M_lossless:BUSY=30, read_M_alpha:BUSY=119, read_M_lossless:BUSY=56}
+interval t_s=1020 ops=22792 ops_per_s=23.77 errors={read_L_lossy:BUSY=62, read_M_lossy:BUSY=170, read_anim_all:BUSY=59, write_M_lossy:BUSY=66, write_M_lossless:BUSY=33, read_M_alpha:BUSY=127, read_M_lossless:BUSY=59}
+interval t_s=1080 ops=24087 ops_per_s=21.58 errors={read_L_lossy:BUSY=67, read_M_lossy:BUSY=184, read_anim_all:BUSY=60, write_M_lossy:BUSY=71, write_M_lossless:BUSY=34, read_M_alpha:BUSY=138, read_M_lossless:BUSY=65}
+interval t_s=1140 ops=25433 ops_per_s=22.43 errors={read_L_lossy:BUSY=69, read_M_lossy:BUSY=193, read_anim_all:BUSY=65, write_M_lossy:BUSY=77, write_M_lossless:BUSY=34, read_M_alpha:BUSY=146, read_M_lossless:BUSY=72}
+interval t_s=1200 ops=26752 ops_per_s=21.98 errors={read_L_lossy:BUSY=75, read_M_lossy:BUSY=205, read_anim_all:BUSY=67, write_M_lossy:BUSY=82, write_M_lossless:BUSY=34, read_M_alpha:BUSY=153, read_M_lossless:BUSY=74}
+op read_M_lossy count=8160 p50_ms=98.18 p99_ms=429.32 max_ms=1188.66
+op read_M_alpha count=5282 p50_ms=102.33 p99_ms=461.16 max_ms=982.23
+op read_M_lossless count=2634 p50_ms=115.46 p99_ms=522.16 max_ms=1000.57
+op read_L_lossy count=2611 p50_ms=106.41 p99_ms=660.85 max_ms=939.63
+op write_M_lossy count=4043 p50_ms=140.84 p99_ms=436.47 max_ms=1035.95
+op write_M_lossless count=1331 p50_ms=314.09 p99_ms=678.50 max_ms=1116.75
+op read_anim_all count=2694 p50_ms=266.77 p99_ms=643.46 max_ms=1255.38
+summary threads=4 elapsed_s=1200.2 ops=26755 ops_per_s=22.29 errors={read_L_lossy:BUSY=75, read_M_lossy:BUSY=205, read_anim_all:BUSY=67, write_M_lossy:BUSY=82, write_M_lossless:BUSY=34, read_M_alpha:BUSY=153, read_M_lossless:BUSY=74} gc_count=1458 gc_ms=1430 gc_share=0.0012

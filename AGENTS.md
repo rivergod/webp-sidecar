@@ -75,7 +75,7 @@ docs/         조사(research), 결정(adr), 설계(design), 규칙(conventions)
 | 서버 퍼징 | `server/fuzz/run.sh [decode\|get_features\|encode\|encode_animation] [초]` | Docker 안 nightly + clang(호스트 설치 불필요). 커버리지: `server/fuzz/coverage.sh`. 결과 기록: [docs/research/0010-server-fuzzing.md](docs/research/0010-server-fuzzing.md) |
 | client-jvm 단위 테스트 | `./gradlew :client-jvm:test` | 컴파일에 `-Werror`와 공개 API javadoc 검사(doclint) 포함. javadoc 생성도 함께 돈다 |
 | client-jvm 통합 테스트 | `./gradlew :client-jvm:integrationTest` | Docker 필요(서버 이미지를 먼저 빌드한다). JDK 매트릭스: `:client-jvm:testMatrix`. 그 밖의 작업: [client-jvm/README.md](client-jvm/README.md) |
-| bench | `bench/run.sh` (연결 확인만: `bench/run.sh smoke`) | Docker, taskset, Rust musl 타깃 필요. 전체 약 4시간. 상세: [bench/README.md](bench/README.md) |
+| bench | `bench/run.sh` (연결 확인만: `bench/run.sh smoke`) | Docker, taskset, Rust 툴체인 필요. 전체 약 4시간. 상세: [bench/README.md](bench/README.md) |
 
 ## 금지 사항
 

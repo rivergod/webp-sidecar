@@ -16,7 +16,7 @@
 #   BENCH_SERVER_CPUS  서버 컨테이너를 고정할 CPU(기본 12,14: P코어 2개). --cpus 2(ADR-0012 기본값)와 함께 쓴다
 #   BENCH_TCP_PORT     TCP 측정 서버 포트(기본 50061, 127.0.0.1)
 #
-# 그 밖에 필요한 것: Rust 툴체인(server/rust-toolchain.toml, musl 타깃)과 musl-gcc(decode-time 단계).
+# 그 밖에 필요한 것: Rust 툴체인(server/rust-toolchain.toml, decode-time 단계).
 #
 # 기본 CPU 값은 측정 호스트(i9-14900: P코어 CPU 0-15, E코어 16-31)에 맞춘 것이다. 다른 호스트에서는 lscpu -e로 확인해 바꾼다.
 # JVM과 서버를 같은 최대 클럭(5.5 GHz) P코어에 따로 고정해 하이브리드 CPU의 코어 배정 차이를 없앤다.
@@ -171,7 +171,9 @@ run_suite() {
     "$@" -rf json -rff "$RESULTS/$suite.json" -o "$RESULTS/$suite.txt"
 }
 
-# 서버와 같은 musl 할당자, 같은 libwebp 빌드(기본/AVX2)로 디코딩만 잰다. 서버 CPU 하나에 고정한다.
+# 서버 이미지와 같은 glibc 할당자(ADR-0021, 호스트 glibc), 같은 libwebp 빌드(기본/AVX2)로 디코딩만 잰다.
+# 서버는 출력 버퍼를 풀로 재사용하므로(ADR-0018) 같은 버퍼를 재사용해 잰다(DECODE_TIME_REUSE=1). 새로 할당하면
+# M lossy가 musl 19%, glibc XL lossy 27% 느려 서버 값과 달라진다(research/0015). 서버 CPU 하나에 고정한다.
 decode_time() {
   local cpu=${SERVER_CPUS%%,*}
   local files=()
@@ -184,9 +186,9 @@ decode_time() {
     local feat=() dir="$ROOT/server/target"
     if [ "$build" = avx2 ]; then feat=(--features simd-avx2); dir="$ROOT/server/target/avx2"; fi
     log "decode-time ($build)"
-    (cd server && cargo build -q --release --locked --target x86_64-unknown-linux-musl --example decode_time \
+    (cd server && cargo build -q --release --locked --target x86_64-unknown-linux-gnu --example decode_time \
       --target-dir "$dir" "${feat[@]}")
-    taskset -c "$cpu" "$dir/x86_64-unknown-linux-musl/release/examples/decode_time" 50 "${files[@]}" \
+    DECODE_TIME_REUSE=1 taskset -c "$cpu" "$dir/x86_64-unknown-linux-gnu/release/examples/decode_time" 50 "${files[@]}" \
       | sed "s|$ROOT/samples/bench/photo/||" >"$RESULTS/decode-time-$build.tsv"
   done
 }

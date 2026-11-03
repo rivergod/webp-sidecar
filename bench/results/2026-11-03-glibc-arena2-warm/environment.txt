@@ -1,0 +1,6 @@
+date_utc: 2026-11-03T03:57:31Z
+git: 7d7b402f2756d47b9d577bdd2604c40ee700f1aa
+image: webp-imageio-server:arena2 sha256:01f535225c253ddb425bbaabb3ea7a8269283cfc344e994a7b2f3a5fb4884e9c
+seccomp: /home/rivergod/_git/webp-imageio-external-server-proto/deploy/seccomp/webp-imageio-server.json
+warm_minutes: 20 (MixedLoad, JVM 3 x 4 threads, busy-retries 3)
+note: webp-imageio-server:arena2 = webp-imageio-server:dev sha256:b8257976... (malloc_trim) + ENV MALLOC_ARENA_MAX=2 (scratch Dockerfile). Same layers and environment as the final image built from deploy/Dockerfile (sha256:c8ffaa87...)

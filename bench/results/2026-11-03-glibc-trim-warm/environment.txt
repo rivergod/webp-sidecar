@@ -1,0 +1,6 @@
+date_utc: 2026-11-03T03:23:13Z
+git: 7d7b402f2756d47b9d577bdd2604c40ee700f1aa
+image: webp-imageio-server:dev sha256:69aba94bf93e4918dcfb62bef50486dcc9063baae799600da27368728be45f6f
+seccomp: /home/rivergod/_git/webp-imageio-external-server-proto/deploy/seccomp/webp-imageio-server.json
+warm_minutes: 20 (MixedLoad, JVM 3 x 4 threads, busy-retries 3)
+note: webp-imageio-server:dev was sha256:69aba94b... (malloc_trim, default arenas); later rebuilds have the same layers

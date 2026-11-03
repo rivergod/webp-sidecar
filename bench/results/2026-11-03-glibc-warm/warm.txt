@@ -1,0 +1,10 @@
+idle_baseline after_s=5 anon_mib=0.4
+warm_end anon_mib=151.8
+idle_after_warm after_s=60 anon_mib=78.4
+worst op=decode-lossless side=8192 concurrent=2 anon_before_mib=78.4 current_max_1s_mib=336.1 result=ok running=true oom=false
+worst op=decode-lossy side=8192 concurrent=2 anon_before_mib=78.4 current_max_1s_mib=287.4 result=ok running=true oom=false
+worst op=encode-lossless side=4096 concurrent=2 anon_before_mib=78.6 current_max_1s_mib=585.9 result=ok running=true oom=false
+worst op=encode-lossy side=4096 concurrent=2 anon_before_mib=123.2 current_max_1s_mib=544.8 result=ok running=true oom=false
+worst op=decode-anim side=4096 concurrent=2 anon_before_mib=162.4 current_max_1s_mib=339.1 result=ok running=true oom=false
+memory_peak_mib(container lifetime)=705 oom=false
+idle_after_worst after_s=60 anon_mib=176.5

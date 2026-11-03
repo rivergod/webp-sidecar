@@ -1,0 +1,16 @@
+date_utc: 2026-11-02T06:43:19Z
+git: 694086611524421f88bd7a65ee4bf3c9af814c11
+cpu: Intel(R) Core(TM) i9-14900
+cpus: 32, jvm_cpus: 0,2,4,6, server_cpus: 12,14 (--cpus 2, --memory 1g)
+governor: powersave
+no_turbo: 0
+memory: 61 GiB
+kernel: 7.0.0-42-generic
+os: Ubuntu 26.04.1 LTS
+java: openjdk version "25.0.5" 2026-10-20 LTS OpenJDK Runtime Environment Temurin-25.0.5+8 (build 25.0.5+8-LTS) OpenJDK 64-Bit Server VM Temurin-25.0.5+8 (build 25.0.5+8-LTS, mixed mode, sharing) 
+docker: 29.1.3
+image_sse2: sha256:fbdcf58193ed8976fcdcfe9764c3f279b3b563d896fc487d9715123b81d6bf7e
+image_avx2: sha256:9a0b1ba63c63187e761ab2738d192786e004e3c6e0d9b2db0dd0466e2c3c93ef
+wasm: ed9d02b61066dd26ceccb08f1cd7e6bc0d1f7ad718c2126e7120ae4e3a44dd06 (libwebp 1.6.0, wasi-sdk 34, -O3, no SIMD, no threads)
+jmh_jars: imageio-webp-3.15.3.jar jmh-core-1.37.jar runtime-1.7.5.jar webp-imageio-0.3.3.jar webp-imageio-external-server-proto-0.1.0-SNAPSHOT.jar 
+photo: 747075598f568cb9d0e4902627f39b5ad19f09c72492ee3dec0b5ce181a7759f

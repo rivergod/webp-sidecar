@@ -1213,6 +1213,7 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "clap",
+ "libc",
  "libwebp-sys",
  "prost",
  "tokio",
