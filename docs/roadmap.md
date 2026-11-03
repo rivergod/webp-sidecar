@@ -12,6 +12,7 @@
 | Phase 5 | 보안 강화(seccomp, 퍼징) + 성능 보강 + proto 회고 | 완료 (2026-10-29). 사이드카 구조로 확정(ADR-0019), 버퍼 풀 확정(ADR-0018), 작업량 상한 확정·구현(ADR-0017), 메모리 예산 확정·구현(ADR-0016), 설정 주입 확정(ADR-0020, 2026-10-30) |
 | 검증 보강 | javadoc·프록시 경로 시험, 인코딩 퍼징·커버리지, alpha 격차 원인, 장시간·섞인 부하 | 완료 (2026-10-30). 대응 결정은 후보로 넘김(research/0013, 0014) |
 | glibc 서버 이미지 | 서버 이미지를 glibc 동적 + distroless/cc로 바꾸고(ADR-0021) 확인한다 | 완료 (2026-11-03). ADR-0021 확정, ADR-0011 18/18 충족 |
+| 이름 변경 | 프로젝트 이름을 `webp-sidecar`로 바꾸고 구성 요소 이름(패키지, artifactId, 서버·이미지, 소켓 경로, 설정 키)을 맞춘다(ADR-0022) | 완료 (2026-11-03). 기록 문서(확정 ADR 본문, research, bench/results)는 옛 이름 그대로 |
 
 ## Phase 0: 기반 정리
 
@@ -70,7 +71,7 @@
 - [x] [ADR-0014](adr/0014-animation-and-metadata-mapping.md)의 순차 읽기 정책을 구현한다. `read(0..n-1)` 순차 읽기에서 `DecodeAnimation`이 한 번만 호출된다. — 파일마다 스트림 1회 확인(AnimationMetadataIntegrationTest)
 - [x] 시퀀스 쓰기(`writeToSequence`)로 만든 애니메이션을 다시 읽으면 프레임 픽셀(lossless), 표시 시간, 반복 횟수가 일치한다.
 - [x] ICC/EXIF/XMP 읽기·쓰기 왕복에서 페이로드 바이트가 일치한다.
-- [x] `IIOMetadata` 표준 포맷(`javax_imageio_1.0`)이 TwelveMonkeys와 같은 노드를 낸다. native 포맷 `net_rivergod_webp_imageio_1.0`([ADR-0014](adr/0014-animation-and-metadata-mapping.md))의 노드 구조를 설계 문서로 정하고 구현한다(TwelveMonkeys에는 native 포맷이 없다 — [research/0001](research/0001-java-webp-landscape.md)). — 노드 구성은 TwelveMonkeys 소스 기준으로 맞췄고(WebPMetadataTest), 실제 출력 비교는 Phase 4 벤치 모듈에서 한다. native 포맷: [design/imageio-metadata.md](design/imageio-metadata.md)
+- [x] `IIOMetadata` 표준 포맷(`javax_imageio_1.0`)이 TwelveMonkeys와 같은 노드를 낸다. native 포맷 `net_rivergod_webp_sidecar_1.0`([ADR-0014](adr/0014-animation-and-metadata-mapping.md))의 노드 구조를 설계 문서로 정하고 구현한다(TwelveMonkeys에는 native 포맷이 없다 — [research/0001](research/0001-java-webp-landscape.md)). — 노드 구성은 TwelveMonkeys 소스 기준으로 맞췄고(WebPMetadataTest), 실제 출력 비교는 Phase 4 벤치 모듈에서 한다. native 포맷: [design/imageio-metadata.md](design/imageio-metadata.md)
 - [x] 애니메이션 악성 입력(프레임 수 초과, 캔버스 밖 프레임) 테스트가 통과한다. — 서버 samples.rs(손상 애니메이션 판정), animation.rs(max_frames, 프레임 크기). 출력량 폭탄은 Phase 5
 
 ## Phase 4: JMH 벤치마크 + 결과 보고서
@@ -102,7 +103,7 @@
 
 ### 5-1. 보안 검증
 
-- [x] 서버 seccomp 프로파일을 만들고, 적용 상태에서 전체 통합 테스트가 통과한다. — [deploy/seccomp/webp-imageio-server.json](../deploy/seccomp/webp-imageio-server.json)(허용 55개, 기본 EPERM, x86_64). client-jvm 통합 테스트·벤치 검증·스모크 테스트가 기본으로 적용한다. 만드는 법: [deploy/README.md](../deploy/README.md) "seccomp 프로파일"
+- [x] 서버 seccomp 프로파일을 만들고, 적용 상태에서 전체 통합 테스트가 통과한다. — [deploy/seccomp/webp-sidecar.json](../deploy/seccomp/webp-sidecar.json)(허용 55개, 기본 EPERM, x86_64). client-jvm 통합 테스트·벤치 검증·스모크 테스트가 기본으로 적용한다. 만드는 법: [deploy/README.md](../deploy/README.md) "seccomp 프로파일"
 - [x] 컨테이너 제한(메모리/CPU, read-only, 네트워크 차단, non-root)이 실제로 적용됐는지 검증한다. — `deploy/scripts/verify-hardening.sh`: 설정값과 서버 프로세스의 실제 상태(/proc, cgroup) 23개 항목 통과(2026-10-29). [deploy/README.md](../deploy/README.md) "격리 적용 확인"
 - [x] 서버 입력 경로(Decode, GetFeatures, DecodeAnimation) 퍼저를 만들고 실행 결과(시간, 발견 사항)를 기록한다. — [server/fuzz/](../server/fuzz/)(libFuzzer + ASan, Rust와 libwebp C 함께 계측). 대상 2개 × 30분, 실패 0건: [research/0010](research/0010-server-fuzzing.md)
 - [x] 출력량 폭탄 대응을 정한다: 4096² 캔버스 × 1,000프레임 파일은 기본 상한을 모두 통과하지만 합성 출력이 약 64 GiB다(research/0005). 총 출력 픽셀 상한 같은 방안을 ADR로 제안한다. — [ADR-0017](adr/0017-output-volume-limits.md)(accepted, 구현 2026-10-29): 합성 픽셀 수 상한(기본 2^30, 애니메이션 디코딩·인코딩) + 서버 쪽 요청 시간 상한(기본 60초) + 대기 상한(기본 8). 응답을 읽지 않는 클라이언트가 슬롯을 쥐는 문제도 함께 다룬다. 테스트: `server/tests/request_limits.rs`, GIF 부하 재측정 [research/0012](research/0012-gif-conversion-load.md)
