@@ -1,6 +1,6 @@
 # 0003. 전송: UDS 기본 + TCP 옵션, 1 MiB 청크 스트리밍
 
-- 상태: accepted
+- 상태: accepted. 기본 소켓 경로(`/run/webp-imageio/`)만 superseded by [0022](0022-project-name-webp-sidecar.md)(2026-11-03)
 - 날짜: 2026-10-23
 - 결정자: Ilkang Na
 - 관련 문서: [ADR-0001](0001-isolate-libwebp-in-grpc-sidecar.md), [ADR-0004](0004-pixel-transfer-format.md), [docs/design/grpc-api.md](../design/grpc-api.md), [docs/research/0004-jdk-baseline.md](../research/0004-jdk-baseline.md) "UDS 지원 경로", [docs/research/0003-server-language-rust-vs-go.md](../research/0003-server-language-rust-vs-go.md) "gRPC 스택"
