@@ -172,7 +172,8 @@ run_suite() {
 }
 
 # 서버 이미지와 같은 glibc 할당자(ADR-0021, 호스트 glibc), 같은 libwebp 빌드(기본/AVX2)로 디코딩만 잰다.
-# 서버 CPU 하나에 고정한다.
+# 서버는 출력 버퍼를 풀로 재사용하므로(ADR-0018) 같은 버퍼를 재사용해 잰다(DECODE_TIME_REUSE=1). 새로 할당하면
+# M lossy가 musl 19%, glibc XL lossy 27% 느려 서버 값과 달라진다(research/0015). 서버 CPU 하나에 고정한다.
 decode_time() {
   local cpu=${SERVER_CPUS%%,*}
   local files=()
@@ -187,7 +188,7 @@ decode_time() {
     log "decode-time ($build)"
     (cd server && cargo build -q --release --locked --target x86_64-unknown-linux-gnu --example decode_time \
       --target-dir "$dir" "${feat[@]}")
-    taskset -c "$cpu" "$dir/x86_64-unknown-linux-gnu/release/examples/decode_time" 50 "${files[@]}" \
+    DECODE_TIME_REUSE=1 taskset -c "$cpu" "$dir/x86_64-unknown-linux-gnu/release/examples/decode_time" 50 "${files[@]}" \
       | sed "s|$ROOT/samples/bench/photo/||" >"$RESULTS/decode-time-$build.tsv"
   done
 }
