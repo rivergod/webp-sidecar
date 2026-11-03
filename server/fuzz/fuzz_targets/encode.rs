@@ -9,7 +9,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use webp_imageio_server::webp;
+use webp_sidecar::webp;
 
 /// 퍼징 속도를 위해 작게 둔다. 크기 검사(1..=16383)는 같은 함수다.
 const MAX_SIDE: u32 = 64;
@@ -63,13 +63,20 @@ fuzz_target!(|data: &[u8]| {
     assert_eq!((features.width, features.height), (width, height));
     let decoded = webp::decode_still_rgba(&file, &features).expect("encoded file must decode");
     if params.lossless {
-        assert!(decoded == pixels, "lossless round trip changed pixels ({width}x{height})");
+        assert!(
+            decoded == pixels,
+            "lossless round trip changed pixels ({width}x{height})"
+        );
     }
 
     // 성질 2: 넣은 메타데이터를 같은 바이트로 다시 읽는다. 빈 페이로드는 libwebp가 청크로 넣지 않을 수 있어 비교에서 뺀다.
     let read = webp::metadata_chunks(&file, MAX_METADATA_BYTES).expect("metadata must be readable");
     let nonempty = |c: &Option<Vec<u8>>| c.clone().filter(|v| !v.is_empty());
-    assert_eq!(nonempty(&read.icc_profile), nonempty(&metadata.icc_profile), "ICC changed");
+    assert_eq!(
+        nonempty(&read.icc_profile),
+        nonempty(&metadata.icc_profile),
+        "ICC changed"
+    );
     assert_eq!(nonempty(&read.exif), nonempty(&metadata.exif), "EXIF changed");
     assert_eq!(nonempty(&read.xmp), nonempty(&metadata.xmp), "XMP changed");
 });

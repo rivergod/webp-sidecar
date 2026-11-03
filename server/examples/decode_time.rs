@@ -22,12 +22,12 @@ fn main() {
         let reuse = std::env::var("DECODE_TIME_REUSE").is_ok_and(|v| v == "1");
         let mut buffer = Vec::new();
         let mut decode_once = || {
-            let features = webp_imageio_server::webp::features(&data).expect("features");
+            let features = webp_sidecar::webp::features(&data).expect("features");
             if reuse {
-                webp_imageio_server::webp::decode_still_rgba_into(&data, &features, &mut buffer).expect("decode");
+                webp_sidecar::webp::decode_still_rgba_into(&data, &features, &mut buffer).expect("decode");
                 std::hint::black_box(&buffer);
             } else {
-                let pixels = webp_imageio_server::webp::decode_still_rgba(&data, &features).expect("decode");
+                let pixels = webp_sidecar::webp::decode_still_rgba(&data, &features).expect("decode");
                 std::hint::black_box(pixels);
             }
         };

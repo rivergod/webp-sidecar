@@ -4,7 +4,7 @@
 # (./gradlew :bench:installBench)이 먼저 있어야 한다. 서버 프로세스의 /proc/<pid>/smaps를 읽으므로 컨테이너를 현재
 # 사용자로 띄운다.
 #
-#   bench/glibc-check/idle-probe.sh <출력 디렉터리> [이미지, 기본 webp-imageio-server:dev] [부하 초, 기본 60]
+#   bench/glibc-check/idle-probe.sh <출력 디렉터리> [이미지, 기본 webp-sidecar:dev] [부하 초, 기본 60]
 #
 # 환경변수 EXTRA_DOCKER_ARGS: docker run에 더할 옵션(예: "-e MALLOC_ARENA_MAX=1").
 # 출력: idle.txt(부하 끝·유휴 60초 anon, 스레드 수, smaps_rollup, anon 512 KiB 넘는 매핑 목록), smaps.txt(원본),
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 OUT=$(realpath -m "$1")
-IMAGE=${2:-webp-imageio-server:dev}
+IMAGE=${2:-webp-sidecar:dev}
 SECS=${3:-60}
 cd "$(dirname "$0")/../.."
 ROOT=$PWD
@@ -26,9 +26,9 @@ trap 'docker rm -f "$CNAME" >/dev/null 2>&1 || true; rm -rf "$SOCK"' EXIT
 # bench/soak.sh와 같은 격리·자원 제한.
 # shellcheck disable=SC2086
 docker run -d --name "$CNAME" --user "$(id -u):$(id -g)" --read-only --network none --cap-drop ALL \
-  --security-opt no-new-privileges --security-opt "seccomp=$ROOT/deploy/seccomp/webp-imageio-server.json" \
+  --security-opt no-new-privileges --security-opt "seccomp=$ROOT/deploy/seccomp/webp-sidecar.json" \
   --memory 1g --memory-swap 1g --cpus 2 --cpuset-cpus 12,14 --pids-limit 128 ${EXTRA_DOCKER_ARGS:-} \
-  -v "$SOCK:/run/webp-imageio" "$IMAGE" >/dev/null
+  -v "$SOCK:/run/webp-sidecar" "$IMAGE" >/dev/null
 for _ in $(seq 100); do [ -S "$SOCK/webp.sock" ] && break; sleep 0.1; done
 pid=$(docker inspect "$CNAME" --format '{{.State.Pid}}')
 CG=/sys/fs/cgroup$(awk -F: '$1 == "0" { print $3 }' "/proc/$pid/cgroup")
@@ -37,8 +37,8 @@ echo "image: $IMAGE $(docker image inspect --format '{{.Id}}' "$IMAGE") extra_do
 
 pids=()
 for i in 1 2 3; do
-  taskset -c 0,2,4,6 "$JAVA" -Xms1g -Xmx2g -Dwebp.imageio.endpoint="unix://$SOCK/webp.sock" -Dwebp.imageio.busy-retries=3 \
-    -Dwebp.bench.samples="$ROOT/samples" -cp "$LIB/*" net.rivergod.webp.imageio.bench.MixedLoad mixed 4 "$SECS" 60 \
+  taskset -c 0,2,4,6 "$JAVA" -Xms1g -Xmx2g -Dwebp.sidecar.endpoint="unix://$SOCK/webp.sock" -Dwebp.sidecar.busy-retries=3 \
+    -Dwebp.bench.samples="$ROOT/samples" -cp "$LIB/*" net.rivergod.webp.sidecar.bench.MixedLoad mixed 4 "$SECS" 60 \
     >"$OUT/idle-load-$i.txt" 2>/dev/null &
   pids+=($!)
 done

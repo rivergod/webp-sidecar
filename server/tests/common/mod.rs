@@ -10,13 +10,13 @@ use tokio_stream::StreamExt;
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::Status;
 use tonic::transport::{Channel, Endpoint, Uri};
-use webp_imageio_server::admission::RequestPolicy;
-use webp_imageio_server::config::Limits;
-use webp_imageio_server::pool::{BufferPool, PoolConfig};
-use webp_imageio_server::proto as pb;
-use webp_imageio_server::proto::web_p_service_client::WebPServiceClient;
-use webp_imageio_server::router;
-use webp_imageio_server::service::WebpService;
+use webp_sidecar::admission::RequestPolicy;
+use webp_sidecar::config::Limits;
+use webp_sidecar::pool::{BufferPool, PoolConfig};
+use webp_sidecar::proto as pb;
+use webp_sidecar::proto::web_p_service_client::WebPServiceClient;
+use webp_sidecar::router;
+use webp_sidecar::service::WebpService;
 
 /// 테스트가 보내는 조각 크기. 단위: 바이트.
 pub const CHUNK: usize = 1024 * 1024;

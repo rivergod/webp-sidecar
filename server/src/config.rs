@@ -17,13 +17,9 @@ pub const MESSAGE_HEADROOM_BYTES: u64 = 64 * 1024;
 
 /// 명령줄 인자. 지정하지 않은 값은 환경변수, 그다음 기본값을 쓴다.
 #[derive(Debug, Default, Parser)]
-#[command(
-    name = "webp-imageio-server",
-    version,
-    about = "libwebp gRPC sidecar server (webp.v1)"
-)]
+#[command(name = "webp-sidecar", version, about = "libwebp gRPC sidecar server (webp.v1)")]
 pub struct Cli {
-    /// UDS 리슨 경로 [env: WEBP_SERVER_UDS_PATH] [기본: /run/webp-imageio/webp.sock]
+    /// UDS 리슨 경로 [env: WEBP_SERVER_UDS_PATH] [기본: /run/webp-sidecar/webp.sock]
     #[arg(long)]
     pub uds_path: Option<PathBuf>,
     /// 소켓 파일 모드(8진수) [env: WEBP_SERVER_UDS_MODE] [기본: 0660]
@@ -180,7 +176,7 @@ impl Config {
         ) {
             Some((v, _)) if !v.trim().is_empty() => PathBuf::from(v),
             Some((_, source)) => return Err(ConfigError(format!("{source}: must not be empty"))),
-            None => PathBuf::from("/run/webp-imageio/webp.sock"),
+            None => PathBuf::from("/run/webp-sidecar/webp.sock"),
         };
         let uds_mode = match lookup(cli.uds_mode.as_deref(), "WEBP_SERVER_UDS_MODE", &env) {
             None => 0o660,
@@ -334,7 +330,7 @@ mod tests {
         let c = Config::resolve(&Cli::default(), env_of(&[])).unwrap();
 
         // then
-        assert_eq!(c.uds_path, PathBuf::from("/run/webp-imageio/webp.sock"));
+        assert_eq!(c.uds_path, PathBuf::from("/run/webp-sidecar/webp.sock"));
         assert_eq!(c.uds_mode, 0o660);
         assert_eq!(c.tcp_addr, None);
         assert_eq!(c.limits, Limits::default());

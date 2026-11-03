@@ -11,7 +11,7 @@ version = "0.1.0-SNAPSHOT"
 
 base {
     // ADR-0010: 배포 좌표의 artifactId.
-    archivesName.set("webp-imageio-external-server-proto")
+    archivesName.set("webp-sidecar-imageio")
 }
 
 java {
@@ -45,15 +45,17 @@ dependencies {
 // --- proto 코드 생성 ---
 // proto 원본에는 언어별 옵션을 두지 않는다(docs/design/grpc-api.md §6). 생성 직전에 사본에 java 옵션을 넣는다.
 val generatedProtoSrc = layout.buildDirectory.dir("proto-with-java-options")
+val protoJavaOptions = "option java_package = \"net.rivergod.webp.sidecar.proto.v1\";\n" +
+    "option java_multiple_files = true;"
 val prepareProto = tasks.register<Sync>("prepareProto") {
     from(rootProject.layout.projectDirectory.dir("proto"))
     include("**/*.proto")
     into(generatedProtoSrc)
+    // filter 클로저 내용은 Gradle이 입력으로 보지 않으므로, 넣는 옵션을 입력으로 선언해 바뀌면 다시 만든다.
+    inputs.property("protoJavaOptions", protoJavaOptions)
     filter { line ->
         if (line.trim() == "package webp.v1;") {
-            line + "\n" +
-                "option java_package = \"net.rivergod.webp.imageio.proto.v1\";\n" +
-                "option java_multiple_files = true;"
+            line + "\n" + protoJavaOptions
         } else {
             line
         }
@@ -99,18 +101,18 @@ tasks.named<JavaCompile>("compileJava") {
     // 공개 패키지의 문서 주석 누락을 컴파일 오류로 만든다(docs/conventions/code-documentation.md §5). 생성 코드는 제외한다.
     // requires-automatic: grpc-java와 protobuf-java에 module-info가 없어 자동 모듈을 requires할 수밖에 없다(research/0008).
     options.compilerArgs.addAll(
-        listOf("-Xlint:all,-processing,-requires-automatic", "-Xdoclint:all/protected", "-Xdoclint/package:net.rivergod.webp.imageio", "-Werror"),
+        listOf("-Xlint:all,-processing,-requires-automatic", "-Xdoclint:all/protected", "-Xdoclint/package:net.rivergod.webp.sidecar", "-Werror"),
     )
 }
 
 tasks.named<Javadoc>("javadoc") {
     // 생성된 proto/gRPC 코드는 공개 API가 아니다(ADR-0013, module-info에서 export하지 않는다). 문서에서 빼되, 손으로 쓴
     // 코드가 그 클래스를 참조하므로 컴파일된 클래스를 같은 모듈에 덧대어(--patch-module) 이름만 풀게 한다.
-    exclude("net/rivergod/webp/imageio/proto/**")
+    exclude("net/rivergod/webp/sidecar/proto/**")
     val mainClasses = sourceSets.main.get().output.classesDirs
     inputs.files(mainClasses)
     (options as StandardJavadocDocletOptions).addStringOption(
-        "-patch-module", "net.rivergod.webp.imageio=" + mainClasses.asPath,
+        "-patch-module", "net.rivergod.webp.sidecar=" + mainClasses.asPath,
     )
 }
 
@@ -130,7 +132,7 @@ tasks.test {
     dependsOn(tasks.named("javadoc"))
 }
 
-val serverImage = providers.gradleProperty("webpServerImage").orElse("webp-imageio-server:dev")
+val serverImage = providers.gradleProperty("webpServerImage").orElse("webp-sidecar:dev")
 
 // 통합 테스트가 쓸 서버 이미지를 docker CLI로 만든다(.dockerignore 적용, 빌드 캐시 사용).
 val buildServerImage = tasks.register<Exec>("buildServerImage") {
@@ -140,7 +142,7 @@ val buildServerImage = tasks.register<Exec>("buildServerImage") {
 
 // 서버 컨테이너에 적용할 seccomp 프로파일(deploy/README.md). -PwebpSeccompProfile=<경로>로 바꾼다(프로파일 갱신용 LOG 모드 등).
 val seccompProfile = providers.gradleProperty("webpSeccompProfile")
-    .orElse(rootProject.layout.projectDirectory.file("deploy/seccomp/webp-imageio-server.json").asFile.path)
+    .orElse(rootProject.layout.projectDirectory.file("deploy/seccomp/webp-sidecar.json").asFile.path)
 
 fun Test.useServerImage() {
     dependsOn(buildServerImage)

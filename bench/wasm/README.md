@@ -10,8 +10,8 @@
 |---|---|
 | `Dockerfile` | wasi-sdk로 libwebp 1.6.0 디코더 + `shim.c`를 reactor 모듈 `libwebp.wasm`으로 빌드한다 |
 | `shim.c` | JVM에서 부르는 최소 ABI(아래 표) |
-| `../src/main/java/net/rivergod/webp/imageio/bench/wasm/WasmWebPDecoder.java` | Chicory로 모듈을 띄워 `info(byte[])` / `decodeRgba(byte[])` / `decode(byte[])`를 제공한다 |
-| `../src/main/java/net/rivergod/webp/imageio/bench/wasm/WasmVerifyMain.java` | 동작·정확성·대략 시간을 확인하는 명령줄 도구(JMH 아님) |
+| `../src/main/java/net/rivergod/webp/sidecar/bench/wasm/WasmWebPDecoder.java` | Chicory로 모듈을 띄워 `info(byte[])` / `decodeRgba(byte[])` / `decode(byte[])`를 제공한다 |
+| `../src/main/java/net/rivergod/webp/sidecar/bench/wasm/WasmVerifyMain.java` | 동작·정확성·대략 시간을 확인하는 명령줄 도구(JMH 아님) |
 | `build/` | 빌드 산출물(`libwebp.wasm`). 커밋하지 않는다(`.gitignore`) |
 
 Java 소스는 Gradle `bench` 모듈(`bench/src/main/java`)에 있다. Wasm 빌드와 Chicory 코드 생성은 `bench/build.gradle.kts`의 `buildWasm`(docker), `chicoryCompile` 태스크가 한다(아래 "Gradle 연결").
@@ -98,7 +98,7 @@ Chicory 문서는 Maven 플러그인, Gradle 플러그인(서드파티), CLI를 
 
   ```sh
   java -jar build-time-compiler-cli-experimental-1.7.5.jar \
-    --prefix net.rivergod.webp.imageio.bench.wasm.LibWebPModule \
+    --prefix net.rivergod.webp.sidecar.bench.wasm.LibWebPModule \
     --source-dir <gen>/src --class-dir <gen>/classes --wasm-dir <gen>/resources \
     --interpreter-fallback FAIL \
     bench/wasm/build/libwebp.wasm
@@ -136,7 +136,7 @@ Maven 좌표 (모두 Maven Central, sha1·sha256을 Central의 `.sha1`/`.sha256`
 2. CLI jar를 별도 configuration으로 받아 `JavaExec`로 위 명령을 실행한다(입력: `libwebp.wasm`, 출력: 생성 디렉터리).
 3. 생성 소스 디렉터리를 소스 세트에 추가한다(`LibWebPModule.java`).
 4. 생성 클래스 디렉터리를 **컴파일 클래스패스와 출력(jar)** 양쪽에 넣는다. `LibWebPModule.java`가 미리 컴파일된 `LibWebPModuleMachine`을 참조한다(빠뜨리면 `javac`가 `cannot find symbol`로 실패한다 — 겪었음).
-5. 리소스로 `net/rivergod/webp/imageio/bench/wasm/LibWebPModule.meta`(빌드타임 모드)와 `net/rivergod/webp/imageio/bench/wasm/libwebp.wasm`(런타임 컴파일·인터프리터 모드)을 넣는다.
+5. 리소스로 `net/rivergod/webp/sidecar/bench/wasm/LibWebPModule.meta`(빌드타임 모드)와 `net/rivergod/webp/sidecar/bench/wasm/libwebp.wasm`(런타임 컴파일·인터프리터 모드)을 넣는다.
 
 Kotlin DSL 초안 — 작성 당시에는 Gradle로 실행해 보지 않았다. 실제 연결은 `bench/build.gradle.kts`를 본다.
 
@@ -153,7 +153,7 @@ dependencies {
 
 val wasmFile = rootProject.layout.projectDirectory.file("bench/wasm/build/libwebp.wasm")
 val genDir = layout.buildDirectory.dir("generated/chicory")
-val pkgPath = "net/rivergod/webp/imageio/bench/wasm"
+val pkgPath = "net/rivergod/webp/sidecar/bench/wasm"
 
 val chicoryCompile by tasks.registering(JavaExec::class) {
     classpath = chicoryCli
@@ -161,7 +161,7 @@ val chicoryCompile by tasks.registering(JavaExec::class) {
     inputs.file(wasmFile)
     outputs.dir(genDir)
     args(
-        "--prefix", "net.rivergod.webp.imageio.bench.wasm.LibWebPModule",
+        "--prefix", "net.rivergod.webp.sidecar.bench.wasm.LibWebPModule",
         "--source-dir", genDir.get().dir("src").asFile.path,
         "--class-dir", genDir.get().dir("classes").asFile.path,
         "--wasm-dir", genDir.get().dir("resources").asFile.path,
@@ -190,7 +190,7 @@ tasks.jar { from(genDir.map { it.dir("classes") }) }   // jmh 플러그인을 �
 
 ## 검증 (Gradle 없이)
 
-Gradle 모듈로 옮긴 뒤에는 `./gradlew :bench:installBench` 후 `java -cp "bench/build/install/bench/lib/*" net.rivergod.webp.imageio.bench.wasm.WasmVerifyMain ...`로 같은 도구를 실행한다. 아래는 옮기기 전에 한 기록이다.
+Gradle 모듈로 옮긴 뒤에는 `./gradlew :bench:installBench` 후 `java -cp "bench/build/install/bench/lib/*" net.rivergod.webp.sidecar.bench.wasm.WasmVerifyMain ...`로 같은 도구를 실행한다. 아래는 옮기기 전에 한 기록이다.
 
 환경: Intel Core i9-14900(P코어 CPU 0–15, E코어 16–31), 메모리 61 GB, Linux 7.0.0-38-generic, JDK Temurin 25.0.4.1. `javac --release 17 -Xlint:all -Werror`로 경고 없이 컴파일된다.
 
@@ -198,7 +198,7 @@ Gradle 모듈로 옮긴 뒤에는 `./gradlew :bench:installBench` 후 `java -cp 
 
 ```sh
 CP=classes:resources:gen/classes:runtime-1.7.5.jar:wasm-1.7.5.jar   # BUILD_TIME_COMPILED
-java -cp "$CP" net.rivergod.webp.imageio.bench.wasm.WasmVerifyMain BUILD_TIME_COMPILED 100 100 \
+java -cp "$CP" net.rivergod.webp.sidecar.bench.wasm.WasmVerifyMain BUILD_TIME_COMPILED 100 100 \
   photo_1920x1080_q75.webp=photo_1920x1080_q75.pam ...
 ```
 

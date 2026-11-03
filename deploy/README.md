@@ -6,17 +6,17 @@
 |---|---|
 | [Dockerfile](Dockerfile) | glibc 동적 바이너리 + `gcr.io/distroless/cc-debian13:nonroot` 이미지(ADR-0021). 빌드 컨텍스트는 저장소 루트 |
 | [compose.yaml](compose.yaml) | 사이드카 예시(공유 볼륨의 UDS). compose로는 미검증 |
-| [seccomp/webp-imageio-server.json](seccomp/webp-imageio-server.json) | seccomp 허용 목록 프로파일(x86_64). 아래 "seccomp 프로파일" |
+| [seccomp/webp-sidecar.json](seccomp/webp-sidecar.json) | seccomp 허용 목록 프로파일(x86_64). 아래 "seccomp 프로파일" |
 | [scripts/verify-hardening.sh](scripts/verify-hardening.sh) | 격리 옵션이 실제로 적용됐는지 확인. 아래 "격리 적용 확인" |
 
 ## 빌드
 
 ```sh
 # 저장소 루트에서
-docker build -f deploy/Dockerfile -t webp-imageio-server:dev .
+docker build -f deploy/Dockerfile -t webp-sidecar:dev .
 ```
 
-이미지 안의 파일: `/webp-imageio-server`(실행 파일), `/run/webp-imageio/`(소켓 디렉터리, 소유자 65532), `/licenses/`(프로젝트 LICENSE, libwebp `COPYING`·`PATENTS`, Rust 의존성 고지, 베이스 이미지 패키지 목록 `BASE-IMAGE-PACKAGES.tsv`).
+이미지 안의 파일: `/webp-sidecar`(실행 파일), `/run/webp-sidecar/`(소켓 디렉터리, 소유자 65532), `/licenses/`(프로젝트 LICENSE, libwebp `COPYING`·`PATENTS`, Rust 의존성 고지, 베이스 이미지 패키지 목록 `BASE-IMAGE-PACKAGES.tsv`).
 
 - 베이스는 distroless(셸·패키지 관리자 없음)다. glibc(`libc6`), `libgcc-s1` 등 Debian 패키지가 들어 있고, 각 라이선스 전문은 `/usr/share/doc/<패키지>/copyright`와 `/usr/share/common-licenses/`에 있다. 외부에 배포할 때의 의무(대응 소스): [docs/research/0006](../docs/research/0006-license.md) "glibc 동적 이미지의 배포 의무".
 - **베이스 이미지 갱신**: Dockerfile의 두 digest(빌드 `rust:…-slim-trixie`, 실행 `distroless/cc-debian13`)를 함께 올린다. 둘의 libc6 버전이 같은지, `BASE-IMAGE-PACKAGES.tsv`가 어떻게 바뀌었는지 보고, 아래 "seccomp 프로파일"의 최종 확인(ERRNO 프로파일로 기동과 통합 테스트 전체)과 "격리 적용 확인"을 다시 한다. distroless 이미지는 cosign으로 서명돼 있으니 확인을 권한다(ADR-0021).
@@ -26,10 +26,10 @@ docker build -f deploy/Dockerfile -t webp-imageio-server:dev .
 ```sh
 docker run -d --name webp-server \
   --read-only --network none --cap-drop ALL --security-opt no-new-privileges \
-  --security-opt seccomp=deploy/seccomp/webp-imageio-server.json \
+  --security-opt seccomp=deploy/seccomp/webp-sidecar.json \
   --memory 1g --memory-swap 1g --cpus 2 --pids-limit 128 \
-  -v webp-socket:/run/webp-imageio \
-  webp-imageio-server:dev
+  -v webp-socket:/run/webp-sidecar \
+  webp-sidecar:dev
 ```
 
 - 기본 사용자는 `65532:65532`(non-root), 소켓 모드는 `0660`이다. 클라이언트는 같은 볼륨을 마운트하고 그룹 65532를 쓴다.
@@ -38,11 +38,11 @@ docker run -d --name webp-server \
 - **메모리 제한을 바꾸면 메모리 예산도 함께 바꾼다**: 서버는 `WEBP_SERVER_MAX_MEMORY_BYTES`(기본 768 MiB, `--memory 1g`의 75%) 안에서만 요청을 받는다([ADR-0016](../docs/adr/0016-memory-budget-admission.md)). 컨테이너 제한만 올리면 큰 인코딩은 계속 거부된다. 예: `--memory 4g`이면 `-e WEBP_SERVER_MAX_MEMORY_BYTES=3221225472`(3 GiB).
 - **동시 처리를 늘리면 glibc arena 수도 함께 늘린다**: 이미지는 `MALLOC_ARENA_MAX=2`(기본 동시 처리 2와 같은 수)로 뜬다. arena가 적으면 부하가 끝난 뒤 서버가 빈 메모리를 거의 다 돌려준다(유휴 60초 뒤 약 2 MiB). 대신 스레드 사이 할당 경합이 생길 수 있다(섞인 부하 처리량 약 −3%, [ADR-0021](../docs/adr/0021-glibc-distroless-image.md), [research/0015](../docs/research/0015-glibc-image-verification.md)). 예: `-e WEBP_SERVER_MAX_CONCURRENCY=4 -e MALLOC_ARENA_MAX=4`.
 - 개발용 TCP: `--network` 제한을 풀고 `-e WEBP_SERVER_TCP_ADDR=0.0.0.0:50051 -p 127.0.0.1:50051:50051`. 컨테이너 안에서는 `0.0.0.0`에 바인드해야 포트 게시가 동작하고, 호스트 쪽은 `127.0.0.1`로만 연다.
-- **UDS 경로 길이**: AF_UNIX 소켓 경로는 약 107바이트를 넘을 수 없다. 깊은 임시 디렉터리에 소켓을 두면 연결이 실패한다(기본 `/run/webp-imageio/webp.sock`은 문제없다).
+- **UDS 경로 길이**: AF_UNIX 소켓 경로는 약 107바이트를 넘을 수 없다. 깊은 임시 디렉터리에 소켓을 두면 연결이 실패한다(기본 `/run/webp-sidecar/webp.sock`은 문제없다).
 
 ## seccomp 프로파일
 
-[seccomp/webp-imageio-server.json](seccomp/webp-imageio-server.json)은 허용 목록이다. 목록 밖의 시스템 콜은 `EPERM`으로 실패한다. 경로는 저장소 루트 기준이고, Docker CLI는 파일을 읽어 내용을 보낸다.
+[seccomp/webp-sidecar.json](seccomp/webp-sidecar.json)은 허용 목록이다. 목록 밖의 시스템 콜은 `EPERM`으로 실패한다. 경로는 저장소 루트 기준이고, Docker CLI는 파일을 읽어 내용을 보낸다.
 
 | 항목 | 내용 |
 |---|---|
@@ -54,7 +54,7 @@ docker run -d --name webp-server \
 
 목록을 다시 만드는 방법(서버 코드나 의존성을 바꾼 뒤):
 
-1. 이미지의 파일 시스템을 꺼내(`docker export`) 이미지 안의 동적 로더와 라이브러리로 서버를 호스트에서 `strace -f -o trace.txt`로 띄우고 부하를 건다: `strace -f -o trace.txt <root>/lib64/ld-linux-x86-64.so.2 --library-path <root>/usr/lib/x86_64-linux-gnu <root>/webp-imageio-server`. 부하 예: 컨테이너 스모크 테스트, `bench/soak.sh`의 `MixedLoad`(UDS와 TCP), 끝에 SIGTERM. 나온 이름이 서버 목록이다.
+1. 이미지의 파일 시스템을 꺼내(`docker export`) 이미지 안의 동적 로더와 라이브러리로 서버를 호스트에서 `strace -f -o trace.txt`로 띄우고 부하를 건다: `strace -f -o trace.txt <root>/lib64/ld-linux-x86-64.so.2 --library-path <root>/usr/lib/x86_64-linux-gnu <root>/webp-sidecar`. 부하 예: 컨테이너 스모크 테스트, `bench/soak.sh`의 `MixedLoad`(UDS와 TCP), 끝에 SIGTERM. 나온 이름이 서버 목록이다.
 2. 같은 목록에 `"defaultAction": "SCMP_ACT_LOG"`를 준 프로파일로 통합 테스트를 돌린다: `./gradlew :client-jvm:integrationTest -PwebpSeccompProfile=<LOG 프로파일>`. 목록 밖 호출은 막히지 않고 커널 감사 로그에 남는다: `journalctl -k | grep type=1326`(syscall 번호, 프로세스 이름).
 3. 로그에 나온 호출을 이유와 함께 넣고, 기본 동작을 `SCMP_ACT_ERRNO`로 되돌려 통합 테스트를 다시 돌린다.
 
@@ -63,7 +63,7 @@ docker run -d --name webp-server \
 ## 격리 적용 확인
 
 ```sh
-deploy/scripts/verify-hardening.sh            # 저장소 루트에서. 이미지 기본값 webp-imageio-server:dev
+deploy/scripts/verify-hardening.sh            # 저장소 루트에서. 이미지 기본값 webp-sidecar:dev
 ```
 
 위 "실행 (격리 옵션)"과 같은 옵션으로 컨테이너를 띄우고 23개 항목을 확인한다. 설정값만 보지 않고, 호스트에서 본 서버 프로세스의 실제 상태를 함께 본다.
@@ -72,7 +72,7 @@ deploy/scripts/verify-hardening.sh            # 저장소 루트에서. 이미�
 |---|---|
 | 설정값(`docker inspect`) | read-only rootfs, 네트워크 `none`, `cap-drop ALL`, 메모리·스왑 1 GiB, CPU 2, pids 128, 이미지 사용자 65532 |
 | 프로세스(`/proc/<pid>/status`) | uid·gid 65532(real, effective, saved, fs), capability(effective, permitted, bounding) 모두 0, `NoNewPrivs` 1, `Seccomp` 2(필터) |
-| 마운트·네트워크 | `/`는 `ro`, `/run/webp-imageio`만 `rw`. 네트워크 인터페이스는 `lo`뿐 |
+| 마운트·네트워크 | `/`는 `ro`, `/run/webp-sidecar`만 `rw`. 네트워크 인터페이스는 `lo`뿐 |
 | cgroup v2 | `memory.max` 1 GiB, `memory.swap.max` 0, `cpu.max` `200000 100000`, `pids.max` 128 |
 
 2026-10-29 실행 결과: 23개 모두 통과(Docker 29.1.3, runc 1.4.0, cgroup v2). glibc 이미지(ADR-0021)로 바꾼 뒤 2026-11-02에도, 유휴 힙 반환(`malloc_trim`)을 넣은 뒤 2026-11-03에도 23개 모두 통과했다. 메모리 상한이 실제로 프로세스를 멈추는 것은 메모리 예산 측정에서 확인했다(OOMKilled, [research/0007](../docs/research/0007-server-memory-budget.md)).
@@ -84,9 +84,9 @@ deploy/scripts/verify-hardening.sh            # 저장소 루트에서. 이미�
 ```sh
 SOCKDIR=$(mktemp -d /tmp/wps.XXXXXX)
 docker run -d --name webp-smoke --read-only --network none --cap-drop ALL --security-opt no-new-privileges \
-  --security-opt seccomp=deploy/seccomp/webp-imageio-server.json \
-  --memory 1g --cpus 2 --user "$(id -u):$(id -g)" -v "$SOCKDIR:/run/webp-imageio" webp-imageio-server:dev
-(cd server && WEBP_IMAGEIO_TEST_UDS="$SOCKDIR/webp.sock" cargo test --test container -- --ignored)
+  --security-opt seccomp=deploy/seccomp/webp-sidecar.json \
+  --memory 1g --cpus 2 --user "$(id -u):$(id -g)" -v "$SOCKDIR:/run/webp-sidecar" webp-sidecar:dev
+(cd server && WEBP_SIDECAR_TEST_UDS="$SOCKDIR/webp.sock" cargo test --test container -- --ignored)
 docker rm -f webp-smoke
 ```
 

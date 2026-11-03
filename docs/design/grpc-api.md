@@ -111,7 +111,7 @@ sequenceDiagram
 
 | 명령줄 인자 | 환경변수 | 기본값 | 의미 |
 |---|---|---|---|
-| `--uds-path` | `WEBP_SERVER_UDS_PATH` | `/run/webp-imageio/webp.sock` | UDS 리슨 경로 |
+| `--uds-path` | `WEBP_SERVER_UDS_PATH` | `/run/webp-sidecar/webp.sock` | UDS 리슨 경로 |
 | `--uds-mode` | `WEBP_SERVER_UDS_MODE` | `0660` | 소켓 파일 모드 |
 | `--tcp-addr` | `WEBP_SERVER_TCP_ADDR` | 없음(TCP 꺼짐) | TCP 리슨 주소. 권장 `127.0.0.1:50051` |
 | `--max-input-bytes` | `WEBP_SERVER_MAX_INPUT_BYTES` | `67108864` (64 MiB) | `Limits.max_input_bytes` |
@@ -205,10 +205,10 @@ SPI는 ImageIO가 인자 없는 생성자로 만든다. 그래서 기본 설정 
 
 | 설정 | `WebPClientConfig` | 시스템 프로퍼티 | 환경변수 | 기본값 (초안) |
 |---|---|---|---|---|
-| 엔드포인트 (gRPC target) | `endpoint` | `webp.imageio.endpoint` | `WEBP_IMAGEIO_ENDPOINT` | `unix:///run/webp-imageio/webp.sock` |
-| 호출 데드라인(혼잡 재시도 포함) | `deadlineMs` | `webp.imageio.deadline-ms` | `WEBP_IMAGEIO_DEADLINE_MS` | `30000` |
-| 클라이언트 픽셀 상한 | `maxPixels` | `webp.imageio.max-pixels` | `WEBP_IMAGEIO_MAX_PIXELS` | 없음 (서버 상한만 적용) |
-| 혼잡 재시도 횟수 | `busyRetries` | `webp.imageio.busy-retries` | `WEBP_IMAGEIO_BUSY_RETRIES` | `0`(끔), 최대 10 |
+| 엔드포인트 (gRPC target) | `endpoint` | `webp.sidecar.endpoint` | `WEBP_SIDECAR_ENDPOINT` | `unix:///run/webp-sidecar/webp.sock` |
+| 호출 데드라인(혼잡 재시도 포함) | `deadlineMs` | `webp.sidecar.deadline-ms` | `WEBP_SIDECAR_DEADLINE_MS` | `30000` |
+| 클라이언트 픽셀 상한 | `maxPixels` | `webp.sidecar.max-pixels` | `WEBP_SIDECAR_MAX_PIXELS` | 없음 (서버 상한만 적용) |
+| 혼잡 재시도 횟수 | `busyRetries` | `webp.sidecar.busy-retries` | `WEBP_SIDECAR_BUSY_RETRIES` | `0`(끔), 최대 10 |
 
 - 엔드포인트는 gRPC target 문자열이다. UDS는 `unix:///절대/경로`, TCP는 `dns:///host:port` 또는 `host:port`.
 - 기본 엔드포인트와 Windows 개발 환경 처리는 ADR-0003을 따른다.
@@ -225,7 +225,7 @@ SPI는 ImageIO가 인자 없는 생성자로 만든다. 그래서 기본 설정 
 proto 파일에는 `java_package`, `go_package` 같은 언어별 옵션을 넣지 않는다. 생성할 때 지정한다.
 
 - Rust(서버): prost/tonic은 패키지 `webp.v1`을 그대로 모듈로 쓴다(`server/build.rs`).
-- Java(클라이언트): Gradle `prepareProto` 작업이 proto 사본의 `package webp.v1;` 다음 줄에 `option java_package = "net.rivergod.webp.imageio.proto.v1"; option java_multiple_files = true;`를 넣은 뒤 protoc를 돌린다(`client-jvm/build.gradle.kts`). ADR-0013은 buf managed mode를 수단으로 적었지만, Gradle의 protoc 경로에는 managed mode가 없어 같은 결과(패키지 이름, 원본에 언어 옵션 없음)를 이 방식으로 얻는다.
+- Java(클라이언트): Gradle `prepareProto` 작업이 proto 사본의 `package webp.v1;` 다음 줄에 `option java_package = "net.rivergod.webp.sidecar.proto.v1"; option java_multiple_files = true;`를 넣은 뒤 protoc를 돌린다(`client-jvm/build.gradle.kts`). ADR-0013은 buf managed mode를 수단으로 적었지만, Gradle의 protoc 경로에는 managed mode가 없어 같은 결과(패키지 이름, 원본에 언어 옵션 없음)를 이 방식으로 얻는다.
 
 ## 7. 검증
 

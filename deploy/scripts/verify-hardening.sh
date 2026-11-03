@@ -2,12 +2,12 @@
 # 서버 컨테이너의 격리 옵션이 실제로 적용됐는지 확인한다(Phase 5-1, deploy/README.md "실행 (격리 옵션)").
 # 설정값(docker inspect)만이 아니라 호스트에서 본 서버 프로세스 상태(/proc, cgroup)로 확인한다. Linux, Docker 필요.
 #
-#   deploy/scripts/verify-hardening.sh [이미지]     기본 이미지: webp-imageio-server:dev
+#   deploy/scripts/verify-hardening.sh [이미지]     기본 이미지: webp-sidecar:dev
 #
 # 종료 코드: 모두 통과 0, 하나라도 실패 1.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-IMAGE=${1:-webp-imageio-server:dev}
+IMAGE=${1:-webp-sidecar:dev}
 NAME=webp-hardening-$$
 VOLUME=webp-hardening-$$
 
@@ -20,9 +20,9 @@ trap cleanup EXIT
 # deploy/README.md의 실행 명령과 같은 옵션(사용자는 이미지 기본값 65532).
 docker run -d --name "$NAME" \
   --read-only --network none --cap-drop ALL --security-opt no-new-privileges \
-  --security-opt seccomp=deploy/seccomp/webp-imageio-server.json \
+  --security-opt seccomp=deploy/seccomp/webp-sidecar.json \
   --memory 1g --memory-swap 1g --cpus 2 --pids-limit 128 \
-  -v "$VOLUME:/run/webp-imageio" \
+  -v "$VOLUME:/run/webp-sidecar" \
   "$IMAGE" >/dev/null
 sleep 1
 
@@ -61,7 +61,7 @@ check "proc: no_new_privs" "1" "$(status NoNewPrivs)"
 check "proc: seccomp mode (2 = filter)" "2" "$(status Seccomp)"
 # mountinfo 6번째 필드가 마운트 옵션이다.
 check "mount: / read-only" "ro" "$(awk '$5 == "/" { split($6, o, ","); print o[1] }' "/proc/$PID/mountinfo")"
-check "mount: /run/webp-imageio writable" "rw" "$(awk '$5 == "/run/webp-imageio" { split($6, o, ","); print o[1] }' "/proc/$PID/mountinfo")"
+check "mount: /run/webp-sidecar writable" "rw" "$(awk '$5 == "/run/webp-sidecar" { split($6, o, ","); print o[1] }' "/proc/$PID/mountinfo")"
 check "net: interfaces" "lo" "$(awk -F: 'NR > 2 { gsub(/ /, "", $1); print $1 }' "/proc/$PID/net/dev" | tr '\n' ' ' | sed 's/ $//')"
 
 # 3. cgroup v2 제한(서버 프로세스가 속한 cgroup 파일)

@@ -22,8 +22,8 @@ trap 'docker rm -f "$CNAME" >/dev/null 2>&1 || true; rm -rf "$SOCK"' EXIT
 
 # shellcheck disable=SC2086
 docker run -d --rm --name "$CNAME" --user "$(id -u):$(id -g)" --read-only --cap-drop ALL --security-opt no-new-privileges \
-  --security-opt "seccomp=$ROOT/deploy/seccomp/webp-imageio-server.json" --memory 1g --memory-swap 1g --cpus 2 \
-  --cpuset-cpus 12,14 --network none ${EXTRA_DOCKER_ARGS:-} -v "$SOCK:/run/webp-imageio" "$IMAGE" >/dev/null
+  --security-opt "seccomp=$ROOT/deploy/seccomp/webp-sidecar.json" --memory 1g --memory-swap 1g --cpus 2 \
+  --cpuset-cpus 12,14 --network none ${EXTRA_DOCKER_ARGS:-} -v "$SOCK:/run/webp-sidecar" "$IMAGE" >/dev/null
 for _ in $(seq 100); do [ -S "$SOCK/webp.sock" ] && break; sleep 0.1; done
 [ -S "$SOCK/webp.sock" ] || { docker logs "$CNAME" >&2; exit 1; }
 echo "image $IMAGE $(docker image inspect --format '{{.Id}}' "$IMAGE") extra=${EXTRA_DOCKER_ARGS:-}" >"$OUT.env"

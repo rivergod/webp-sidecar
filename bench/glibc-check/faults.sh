@@ -25,7 +25,7 @@ for spec in "$@"; do
     --read-only --network none --cap-drop ALL --security-opt no-new-privileges \
     --security-opt "seccomp=$seccomp" \
     --memory 1g --memory-swap 1g --cpus 2 --cpuset-cpus 12,14 \
-    -v "$SOCK:/run/webp-imageio" "$image" >/dev/null
+    -v "$SOCK:/run/webp-sidecar" "$image" >/dev/null
   for _ in $(seq 100); do [ -S "$SOCK/webp.sock" ] && break; sleep 0.1; done
   pid=$(docker inspect "$CNAME" --format '{{.State.Pid}}')
   CG=/sys/fs/cgroup$(awk -F: '$1 == "0" { print $3 }' "/proc/$pid/cgroup")

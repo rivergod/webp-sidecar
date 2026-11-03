@@ -20,7 +20,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD
 LIB="$ROOT/bench/build/install/bench/lib"
-IMAGE=webp-imageio-server:dev
+IMAGE=webp-sidecar:dev
 TOOLS_IMAGE=webp-samples-tools:libwebp-1.6.0
 RESULTS=${BENCH_RESULTS:-bench/results/$(date -u +%Y%m%dT%H%M%SZ)-gif}
 LOAD_SECONDS=${LOAD_SECONDS:-60}
@@ -51,9 +51,9 @@ server_up() {
   CNAME="wpg-$$-$RANDOM"
   docker run -d --name "$CNAME" --user "$(id -u):$(id -g)" \
     --read-only --network none --cap-drop ALL --security-opt no-new-privileges \
-    --security-opt "seccomp=$ROOT/deploy/seccomp/webp-imageio-server.json" \
+    --security-opt "seccomp=$ROOT/deploy/seccomp/webp-sidecar.json" \
     --memory 1g --memory-swap 1g --cpus 2 --cpuset-cpus 12,14 \
-    -v "$SOCK:/run/webp-imageio" "$IMAGE" >/dev/null
+    -v "$SOCK:/run/webp-sidecar" "$IMAGE" >/dev/null
   for _ in $(seq 100); do [ -S "$SOCK/webp.sock" ] && break; sleep 0.1; done
   [ -S "$SOCK/webp.sock" ] || { docker logs "$CNAME" >&2; exit 1; }
   local pid
@@ -76,8 +76,8 @@ server_down() {
 bench_java() { # bench_java <데드라인 ms> <GifBench 인자...>
   local deadline=$1
   shift
-  taskset -c 0,2,4,6 "$JAVA" -Xms4g -Xmx8g -Dwebp.imageio.endpoint="unix://$SOCK/webp.sock" \
-    -Dwebp.imageio.deadline-ms="$deadline" -cp "$LIB/*" net.rivergod.webp.imageio.bench.GifBench "$@"
+  taskset -c 0,2,4,6 "$JAVA" -Xms4g -Xmx8g -Dwebp.sidecar.endpoint="unix://$SOCK/webp.sock" \
+    -Dwebp.sidecar.deadline-ms="$deadline" -cp "$LIB/*" net.rivergod.webp.sidecar.bench.GifBench "$@"
 }
 
 record_inputs() {
@@ -97,7 +97,7 @@ cmd=${1:-}
 case "$cmd" in
   inputs)
     install_bench
-    "$JAVA" -cp "$LIB/*" net.rivergod.webp.imageio.bench.GifInputs samples ;;
+    "$JAVA" -cp "$LIB/*" net.rivergod.webp.sidecar.bench.GifInputs samples ;;
   single)
     install_bench
     mkdir -p "$RESULTS"

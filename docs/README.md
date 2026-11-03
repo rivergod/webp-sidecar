@@ -58,25 +58,26 @@ docs/
 | [0000](adr/0000-template.md) | 템플릿 | - |
 | [0001](adr/0001-isolate-libwebp-in-grpc-sidecar.md) | libwebp를 별도 프로세스(gRPC 사이드카)로 격리 | accepted |
 | [0002](adr/0002-server-language.md) | 서버 구현 언어: Rust (tonic + libwebp-sys) | accepted |
-| [0003](adr/0003-transport.md) | 전송 방식: UDS 기본, TCP 옵션, 1 MiB 청크 스트리밍 | accepted |
+| [0003](adr/0003-transport.md) | 전송 방식: UDS 기본, TCP 옵션, 1 MiB 청크 스트리밍 | accepted(소켓 경로는 0022로 대체) |
 | [0004](adr/0004-pixel-transfer-format.md) | 픽셀 전송 포맷: RGBA8 비-premultiplied, 행 패딩 없음 | accepted |
 | [0005](adr/0005-jdk-language-build.md) | 클라이언트: JDK 17, Java, Gradle | accepted |
 | [0006](adr/0006-test-samples.md) | 테스트 샘플 세트 구성과 라이선스 | accepted |
 | [0007](adr/0007-agent-glue.md) | AI 에이전트 규칙: AGENTS.md 단일 원본 + 얇은 연결 파일 | accepted |
 | [0008](adr/0008-libwebp-version-pinning.md) | libwebp 버전 고정: 최신 릴리스 태그 + main 미릴리스 수정 추적 | accepted |
 | [0009](adr/0009-license.md) | 프로젝트 라이선스: Apache-2.0 | accepted |
-| [0010](adr/0010-maven-coordinates.md) | Maven 좌표: `net.rivergod:webp-imageio-external-server-proto` | accepted |
+| [0010](adr/0010-maven-coordinates.md) | Maven 좌표: `net.rivergod:webp-imageio-external-server-proto` | accepted(artifactId는 0022로 대체) |
 | [0011](adr/0011-hypothesis-criteria.md) | 가설 판정 기준: 디코딩 처리량 TwelveMonkeys 3배 이상, JNI 50% 이상 | accepted |
-| [0012](adr/0012-server-runtime-config.md) | 서버 실행 구성: 이름, 설정, 상한 기본값, 동시 처리, 컨테이너, 소켓 | accepted("이미지 / libc"만 0021로 대체) |
-| [0013](adr/0013-client-package-and-imageio-mapping.md) | 클라이언트 패키지와 ImageIO 매핑 | accepted |
-| [0014](adr/0014-animation-and-metadata-mapping.md) | 애니메이션·메타데이터 매핑 | accepted |
+| [0012](adr/0012-server-runtime-config.md) | 서버 실행 구성: 이름, 설정, 상한 기본값, 동시 처리, 컨테이너, 소켓 | accepted("이미지 / libc"는 0021, 이름·소켓 경로는 0022로 대체) |
+| [0013](adr/0013-client-package-and-imageio-mapping.md) | 클라이언트 패키지와 ImageIO 매핑 | accepted(패키지·모듈 이름은 0022로 대체) |
+| [0014](adr/0014-animation-and-metadata-mapping.md) | 애니메이션·메타데이터 매핑 | accepted(native 포맷 이름은 0022로 대체) |
 | [0015](adr/0015-benchmark-method.md) | 벤치마크 방법: 환경, 샘플, SIMD 빌드, Wasm 비교 구현 | accepted |
 | [0016](adr/0016-memory-budget-admission.md) | 메모리 예산 기반 요청 허용 | accepted |
 | [0017](adr/0017-output-volume-limits.md) | 요청당 작업량 상한: 합성 픽셀 수 상한, 서버 쪽 요청 시간 상한, 대기 상한 | accepted |
 | [0018](adr/0018-decode-output-buffer-pool.md) | 정지 이미지 디코딩 출력 버퍼 재사용(버퍼 풀)과 만료 정책 | accepted |
 | [0019](adr/0019-prototype-retrospective.md) | 프로토타입 회고: 사이드카 구조를 계속한다(proto `webp.v1` 유지) | accepted |
-| [0020](adr/0020-imageio-config-injection.md) | ImageIO 플러그인 설정을 코드로 넘기는 방법 | accepted |
+| [0020](adr/0020-imageio-config-injection.md) | ImageIO 플러그인 설정을 코드로 넘기는 방법 | accepted(설정 키 이름은 0022로 대체) |
 | [0021](adr/0021-glibc-distroless-image.md) | 서버 이미지를 glibc 동적 바이너리 + distroless/cc로 바꾼다(유휴 trim, arena 2개) | accepted |
+| [0022](adr/0022-project-name-webp-sidecar.md) | 프로젝트 이름을 `webp-sidecar`로 바꾸고 구성 요소 이름을 한 규칙으로 맞춘다 | accepted |
 
 ### 조사
 

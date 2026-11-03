@@ -28,11 +28,11 @@ fn main() {
     }
     println!("after input  {}", peak_rss());
 
-    let params = webp_imageio_server::webp::EncodeParams {
+    let params = webp_sidecar::webp::EncodeParams {
         lossless: mode == "lossless",
         quality: None,
         method: None,
     };
-    let out = webp_imageio_server::webp::encode_still_rgba(&pixels, side, side, &params).expect("encode");
+    let out = webp_sidecar::webp::encode_still_rgba(&pixels, side, side, &params).expect("encode");
     println!("after encode {} output_bytes={}", peak_rss(), out.len());
 }

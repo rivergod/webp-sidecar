@@ -16,7 +16,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD
 LIB="$ROOT/bench/build/install/bench/lib"
-IMAGE=webp-imageio-server:dev
+IMAGE=webp-sidecar:dev
 RESULTS=${BENCH_RESULTS:-bench/results/$(date -u +%Y%m%dT%H%M%SZ)-soak}
 
 log() { printf '[soak %s] %s\n' "$(date -u +%H:%M:%S)" "$*" >&2; }
@@ -36,9 +36,9 @@ server_up() {
   CNAME="wps-$$-$RANDOM"
   docker run -d --name "$CNAME" --user "$(id -u):$(id -g)" \
     --read-only --network none --cap-drop ALL --security-opt no-new-privileges \
-    --security-opt "seccomp=$ROOT/deploy/seccomp/webp-imageio-server.json" \
+    --security-opt "seccomp=$ROOT/deploy/seccomp/webp-sidecar.json" \
     --memory 1g --memory-swap 1g --cpus 2 --cpuset-cpus 12,14 --pids-limit 128 \
-    -v "$SOCK:/run/webp-imageio" "$IMAGE" >/dev/null
+    -v "$SOCK:/run/webp-sidecar" "$IMAGE" >/dev/null
   for _ in $(seq 100); do [ -S "$SOCK/webp.sock" ] && break; sleep 0.1; done
   [ -S "$SOCK/webp.sock" ] || { docker logs "$CNAME" >&2; exit 1; }
   local pid
@@ -82,9 +82,9 @@ stop_sampler() {
 }
 
 java_run() { # java_run <MixedLoad 인자...>
-  taskset -c 0,2,4,6 "$JAVA" -Xms1g -Xmx2g -Dwebp.imageio.endpoint="unix://$SOCK/webp.sock" \
-    -Dwebp.imageio.busy-retries=3 -Dwebp.bench.samples="$ROOT/samples" \
-    -cp "$LIB/*" net.rivergod.webp.imageio.bench.MixedLoad "$@"
+  taskset -c 0,2,4,6 "$JAVA" -Xms1g -Xmx2g -Dwebp.sidecar.endpoint="unix://$SOCK/webp.sock" \
+    -Dwebp.sidecar.busy-retries=3 -Dwebp.bench.samples="$ROOT/samples" \
+    -cp "$LIB/*" net.rivergod.webp.sidecar.bench.MixedLoad "$@"
 }
 
 # JVM <n>개를 동시에 띄워 mixed를 돌리고 각 출력을 <prefix>-<i>.txt에 남긴다.

@@ -12,7 +12,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "webp-imageio-external-server-proto"
+rootProject.name = "webp-sidecar"
 
 include("client-jvm")
 include("bench")

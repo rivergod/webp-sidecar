@@ -52,7 +52,7 @@ val wasmDir = layout.projectDirectory.dir("wasm")
 val wasmFile = wasmDir.file("build/libwebp.wasm")
 val chicoryGen = layout.buildDirectory.dir("generated/chicory")
 val wasmResourceDir = layout.buildDirectory.dir("generated/wasm-resource")
-val wasmPackagePath = "net/rivergod/webp/imageio/bench/wasm"
+val wasmPackagePath = "net/rivergod/webp/sidecar/bench/wasm"
 
 val buildWasm = tasks.register<Exec>("buildWasm") {
     description = "libwebp v1.6.0을 wasi-sdk로 Wasm 빌드한다(docker)."
@@ -74,7 +74,7 @@ val chicoryCompile = tasks.register<JavaExec>("chicoryCompile") {
     outputs.dir(chicoryGen)
     doFirst { delete(chicoryGen) }
     args(
-        "--prefix", "net.rivergod.webp.imageio.bench.wasm.LibWebPModule",
+        "--prefix", "net.rivergod.webp.sidecar.bench.wasm.LibWebPModule",
         "--source-dir", chicoryGen.get().dir("src").asFile.path,
         "--class-dir", chicoryGen.get().dir("classes").asFile.path,
         "--wasm-dir", chicoryGen.get().dir("resources").asFile.path,

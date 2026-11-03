@@ -1,6 +1,6 @@
 # 0010. Maven 좌표: `net.rivergod:webp-imageio-external-server-proto`
 
-- 상태: accepted
+- 상태: accepted. artifactId만 superseded by [0022](0022-project-name-webp-sidecar.md)(2026-11-03, `webp-sidecar-imageio`)
 - 날짜: 2026-10-23
 - 결정자: Ilkang Na
 - 관련 문서: [ADR-0005](0005-jdk-language-build.md), [docs/research/0006-license.md](../research/0006-license.md) "Maven 좌표 관련 사실"

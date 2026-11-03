@@ -1,4 +1,4 @@
-# webp-imageio-external-server-proto
+# webp-sidecar
 
 libwebp를 **별도 프로세스(gRPC 사이드카 서버)** 로 격리하고, JVM에서는 그 서버를 호출하는 **ImageIO SPI 플러그인**으로 WebP를 읽고 쓰는 구조를 검증하는 프로토타입이다.
 

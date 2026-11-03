@@ -8,8 +8,8 @@ use common::{
     get_features, pattern,
 };
 use tonic::Code;
-use webp_imageio_server::config::Limits;
-use webp_imageio_server::proto as pb;
+use webp_sidecar::config::Limits;
+use webp_sidecar::proto as pb;
 
 const ANIM: &[u8] = include_bytes!("../../spikes/testdata/anim.webp");
 

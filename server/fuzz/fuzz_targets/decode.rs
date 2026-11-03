@@ -3,7 +3,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use webp_imageio_server::webp;
+use webp_sidecar::webp;
 
 /// 퍼징 속도와 메모리(libFuzzer 기본 RSS 한도 2 GiB)를 위해 서버 기본값(64 MP, 1000프레임)보다 낮춘다.
 /// 상한 검사 자체는 같은 코드 경로다. 프레임 수 × 캔버스 크기에 따른 출력량은 별도 과제다(로드맵 5-1 출력량 폭탄).

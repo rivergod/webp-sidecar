@@ -1,6 +1,6 @@
 # 0014. 애니메이션·메타데이터 매핑: 순차 읽기, IIOMetadata 형식, ICC, 애니메이션 쓰기
 
-- 상태: accepted
+- 상태: accepted. native 메타데이터 포맷 이름만 superseded by [0022](0022-project-name-webp-sidecar.md)(2026-11-03)
 - 날짜: 2026-10-23
 - 결정자: Ilkang Na
 - 관련 문서: [docs/design/grpc-api.md](../design/grpc-api.md) §2.4, [docs/research/0001-java-webp-landscape.md](../research/0001-java-webp-landscape.md), [ADR-0013](0013-client-package-and-imageio-mapping.md)

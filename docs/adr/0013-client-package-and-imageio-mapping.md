@@ -1,6 +1,6 @@
 # 0013. 클라이언트 패키지와 ImageIO 매핑: 패키지·모듈 이름, 디코딩 결과 타입, 쓰기 파라미터
 
-- 상태: accepted
+- 상태: accepted. 패키지·모듈 이름(생성 proto 패키지 포함)만 superseded by [0022](0022-project-name-webp-sidecar.md)(2026-11-03)
 - 날짜: 2026-10-23
 - 결정자: Ilkang Na
 - 관련 문서: [ADR-0004](0004-pixel-transfer-format.md), [ADR-0005](0005-jdk-language-build.md), [ADR-0010](0010-maven-coordinates.md)
