@@ -2,7 +2,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use webp_imageio_server::webp;
+use webp_sidecar::webp;
 
 /// 서버 기본 상한(ADR-0012). 이 경로는 픽셀을 할당하지 않으므로 기본값 그대로 쓴다.
 const MAX_FRAMES: u32 = 1000;

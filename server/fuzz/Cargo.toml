@@ -1,7 +1,7 @@
 # 서버 입력 경로 퍼저(Phase 5-1). 실행: server/fuzz/run.sh (Docker 안에서 nightly + cargo-fuzz + clang).
 # 서버 작업 공간과 분리한다(nightly 전용 플래그와 ASan 빌드가 서버 빌드에 섞이지 않게).
 [package]
-name = "webp-imageio-server-fuzz"
+name = "webp-sidecar-fuzz"
 version = "0.0.0"
 edition = "2024"
 publish = false
@@ -11,7 +11,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "=0.4.13"
-webp-imageio-server = { path = ".." }
+webp-sidecar = { path = ".." }
 
 [[bin]]
 name = "get_features"

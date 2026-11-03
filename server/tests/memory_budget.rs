@@ -2,18 +2,18 @@
 //! 기본 실행에서 제외한다. 사용법: server/scripts/measure-memory.sh
 //!
 //! 환경변수
-//! - `WEBP_IMAGEIO_TEST_UDS`: 서버 소켓 경로(필수)
-//! - `WEBP_IMAGEIO_TEST_OP`: decode-lossless | decode-lossy | encode-lossless | encode-lossy | decode-anim | encode-anim
+//! - `WEBP_SIDECAR_TEST_UDS`: 서버 소켓 경로(필수)
+//! - `WEBP_SIDECAR_TEST_OP`: decode-lossless | decode-lossy | encode-lossless | encode-lossy | decode-anim | encode-anim
 //!   (애니메이션은 lossless 3프레임)
-//! - `WEBP_IMAGEIO_TEST_SIDE`: 정사각형 한 변 픽셀 수(기본 8192)
-//! - `WEBP_IMAGEIO_TEST_CONCURRENT`: 동시에 보낼 요청 수(기본 1)
+//! - `WEBP_SIDECAR_TEST_SIDE`: 정사각형 한 변 픽셀 수(기본 8192)
+//! - `WEBP_SIDECAR_TEST_CONCURRENT`: 동시에 보낼 요청 수(기본 1)
 
 mod common;
 
 use common::{channel_at, decode, decode_animation, decode_options, encode, encode_animation, pattern};
-use webp_imageio_server::proto as pb;
-use webp_imageio_server::proto::web_p_service_client::WebPServiceClient;
-use webp_imageio_server::webp;
+use webp_sidecar::proto as pb;
+use webp_sidecar::proto::web_p_service_client::WebPServiceClient;
+use webp_sidecar::webp;
 
 fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
@@ -23,12 +23,12 @@ fn env_or(key: &str, default: &str) -> String {
 #[ignore = "requires a running server container (server/scripts/measure-memory.sh)"]
 async fn memory_budget_worst_case_operation_completes() {
     // given: 작업 입력을 이 프로세스에서 미리 만든다(서버 메모리 측정에 섞이지 않게).
-    let socket: std::path::PathBuf = std::env::var_os("WEBP_IMAGEIO_TEST_UDS")
-        .expect("WEBP_IMAGEIO_TEST_UDS")
+    let socket: std::path::PathBuf = std::env::var_os("WEBP_SIDECAR_TEST_UDS")
+        .expect("WEBP_SIDECAR_TEST_UDS")
         .into();
-    let op = env_or("WEBP_IMAGEIO_TEST_OP", "decode-lossless");
-    let side: u32 = env_or("WEBP_IMAGEIO_TEST_SIDE", "8192").parse().unwrap();
-    let concurrent: usize = env_or("WEBP_IMAGEIO_TEST_CONCURRENT", "1").parse().unwrap();
+    let op = env_or("WEBP_SIDECAR_TEST_OP", "decode-lossless");
+    let side: u32 = env_or("WEBP_SIDECAR_TEST_SIDE", "8192").parse().unwrap();
+    let concurrent: usize = env_or("WEBP_SIDECAR_TEST_CONCURRENT", "1").parse().unwrap();
     let pixels = pattern(side, side, true);
     let lossless = op.ends_with("lossless") || op.ends_with("anim");
     let params = webp::EncodeParams {

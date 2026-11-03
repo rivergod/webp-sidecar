@@ -1,21 +1,21 @@
 //! 실행 중인 서버 컨테이너에 UDS로 붙는 스모크 테스트. 컨테이너가 필요하므로 기본 실행에서 제외한다.
 //!
-//! 실행: deploy/README.md "스모크 테스트" (WEBP_IMAGEIO_TEST_UDS에 소켓 경로를 준다)
+//! 실행: deploy/README.md "스모크 테스트" (WEBP_SIDECAR_TEST_UDS에 소켓 경로를 준다)
 //! `cargo test --test container -- --ignored`
 
 mod common;
 
 use common::{channel_at, decode, decode_options, encode, pattern};
 use tonic::Code;
-use webp_imageio_server::proto as pb;
-use webp_imageio_server::proto::web_p_service_client::WebPServiceClient;
+use webp_sidecar::proto as pb;
+use webp_sidecar::proto::web_p_service_client::WebPServiceClient;
 
 const STILL: &[u8] = include_bytes!("../../spikes/testdata/still.webp");
 const BOMB: &[u8] = include_bytes!("../../spikes/testdata/bomb_16384.webp");
 
 fn socket() -> std::path::PathBuf {
-    std::env::var_os("WEBP_IMAGEIO_TEST_UDS")
-        .expect("set WEBP_IMAGEIO_TEST_UDS to the container socket path")
+    std::env::var_os("WEBP_SIDECAR_TEST_UDS")
+        .expect("set WEBP_SIDECAR_TEST_UDS to the container socket path")
         .into()
 }
 

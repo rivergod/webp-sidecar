@@ -1,7 +1,7 @@
 //! 출력 버퍼 재사용(ADR-0018)에서 이전 요청의 픽셀이 다음 결과에 섞이지 않는지 확인한다.
 
 use std::path::PathBuf;
-use webp_imageio_server::webp;
+use webp_sidecar::webp;
 
 fn sample(rel: &str) -> Vec<u8> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../samples").join(rel);

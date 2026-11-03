@@ -1,4 +1,4 @@
-//! webp-imageio-server 실행 파일. 설정을 읽고 UDS(기본)와 TCP(옵션)에서 서비스한다(ADR-0003, ADR-0012).
+//! webp-sidecar 실행 파일. 설정을 읽고 UDS(기본)와 TCP(옵션)에서 서비스한다(ADR-0003, ADR-0012).
 
 use clap::Parser;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
@@ -7,11 +7,11 @@ use std::process::ExitCode;
 use tokio::net::{TcpListener, UnixListener};
 use tokio::sync::watch;
 use tokio_stream::wrappers::UnixListenerStream;
-use webp_imageio_server::config::{Cli, Config};
-use webp_imageio_server::heap::{self, IdleTrim};
-use webp_imageio_server::pool::BufferPool;
-use webp_imageio_server::service::WebpService;
-use webp_imageio_server::{router, tcp_incoming};
+use webp_sidecar::config::{Cli, Config};
+use webp_sidecar::heap::{self, IdleTrim};
+use webp_sidecar::pool::BufferPool;
+use webp_sidecar::service::WebpService;
+use webp_sidecar::{router, tcp_incoming};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -43,7 +43,7 @@ async fn main() -> ExitCode {
 }
 
 async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
-    let v = webp_imageio_server::webp::versions();
+    let v = webp_sidecar::webp::versions();
     tracing::info!(
         libwebp = %v.decoder, uds = %config.uds_path.display(), tcp = ?config.tcp_addr,
         limits = ?config.limits, max_concurrency = config.max_concurrency, buffer_pool = ?config.buffer_pool,

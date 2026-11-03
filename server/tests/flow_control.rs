@@ -8,8 +8,8 @@ mod common;
 
 use common::{TestServer, encode, pattern};
 use std::time::Duration;
-use webp_imageio_server::config::Limits;
-use webp_imageio_server::proto as pb;
+use webp_sidecar::config::Limits;
+use webp_sidecar::proto as pb;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_large_uploads_on_one_connection_beyond_slots_all_complete() {

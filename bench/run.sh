@@ -28,8 +28,8 @@ LIB="$ROOT/bench/build/install/bench/lib"
 JVM_CPUS=${BENCH_JVM_CPUS:-0,2,4,6}
 SERVER_CPUS=${BENCH_SERVER_CPUS:-12,14}
 TCP_PORT=${BENCH_TCP_PORT:-50061}
-IMAGE_SSE2=webp-imageio-server:dev
-IMAGE_AVX2=webp-imageio-server:dev-avx2
+IMAGE_SSE2=webp-sidecar:dev
+IMAGE_AVX2=webp-sidecar:dev-avx2
 TOOLS_IMAGE=webp-samples-tools:libwebp-1.6.0
 
 log() { printf '[bench %s] %s\n' "$(date -u +%H:%M:%S)" "$*" >&2; }
@@ -53,7 +53,7 @@ build_inputs() {
   local run=(docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$TOOLS_IMAGE")
   "${run[@]}" sh samples/scripts/build.sh bench
   log "inputs: photo sources (download + sha256 + resize)"
-  "$JAVA" -cp "$LIB/*" net.rivergod.webp.imageio.bench.PhotoSources samples
+  "$JAVA" -cp "$LIB/*" net.rivergod.webp.sidecar.bench.PhotoSources samples
   log "inputs: photo encode (samples tool image)"
   "${run[@]}" sh samples/scripts/build.sh bench-photo
 }
@@ -83,9 +83,9 @@ start_server() {
   local cname="wpb-$name-$$"
   docker run -d --rm --name "$cname" --user "$(id -u):$(id -g)" \
     --read-only --cap-drop ALL --security-opt no-new-privileges \
-    --security-opt "seccomp=$ROOT/deploy/seccomp/webp-imageio-server.json" \
+    --security-opt "seccomp=$ROOT/deploy/seccomp/webp-sidecar.json" \
     --memory 1g --memory-swap 1g --cpus 2 --cpuset-cpus "$SERVER_CPUS" \
-    -v "$dir:/run/webp-imageio" "$@" "$image" >/dev/null
+    -v "$dir:/run/webp-sidecar" "$@" "$image" >/dev/null
   CONTAINERS+=("$cname")
   for _ in $(seq 100); do
     [ -S "$dir/webp.sock" ] && break

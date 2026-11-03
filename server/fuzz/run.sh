@@ -14,8 +14,8 @@ TARGET=${1:-decode}
 SECS=${2:-600}
 FORKS=${3:-8}
 CPUS=${4:-16-31}
-IMAGE=webp-imageio-fuzz:nightly-llvm23
-CACHE=webp-imageio-fuzz-cache
+IMAGE=webp-sidecar-fuzz:nightly-llvm23
+CACHE=webp-sidecar-fuzz-cache
 
 docker build -q -t "$IMAGE" server/fuzz >/dev/null
 # 캐시 볼륨(cargo 레지스트리, 빌드 산출물)을 현재 사용자 소유로 만든다.

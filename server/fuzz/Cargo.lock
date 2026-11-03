@@ -1208,7 +1208,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
-name = "webp-imageio-server"
+name = "webp-sidecar"
 version = "0.1.0"
 dependencies = [
  "bytes",
@@ -1227,11 +1227,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "webp-imageio-server-fuzz"
+name = "webp-sidecar-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
- "webp-imageio-server",
+ "webp-sidecar",
 ]
 
 [[package]]

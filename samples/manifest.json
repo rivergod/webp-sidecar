@@ -1,5 +1,5 @@
 {
-  "description": "Test samples for webp-imageio-external-server-proto (ADR-0006). Single source of truth; SOURCES.md is generated from this file.",
+  "description": "Test samples for webp-sidecar (ADR-0006). Single source of truth; SOURCES.md is generated from this file.",
   "expected_methods": {
     "animation": "webp_probe anim (WebPAnimDecoder, MODE_RGBA, use_threads=0), one SHA-256 per composited canvas; anim_dump output equals this after zeroing pixels with alpha=0 (anim_dump_rgba_sha256 when different)",
     "animation_background": "libwebp ignores the ANIM background color and initializes / disposes to transparent black (0,0,0,0); RFC 9649 §2.7.1.1 treats it as a hint. Expected values follow libwebp.",

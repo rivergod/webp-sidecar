@@ -9,8 +9,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 ROOT=$PWD
-IMAGE=webp-imageio-fuzz:nightly-llvm23
-CACHE=webp-imageio-fuzz-cache
+IMAGE=webp-sidecar-fuzz:nightly-llvm23
+CACHE=webp-sidecar-fuzz-cache
 OUT=server/fuzz/coverage
 TARGETS=("$@")
 [ ${#TARGETS[@]} -eq 0 ] && TARGETS=(decode get_features encode encode_animation)

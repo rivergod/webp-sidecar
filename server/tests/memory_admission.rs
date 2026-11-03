@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Code;
-use webp_imageio_server::proto as pb;
+use webp_sidecar::proto as pb;
 
 const KIB: u64 = 1024;
 const MIB: u64 = 1024 * KIB;

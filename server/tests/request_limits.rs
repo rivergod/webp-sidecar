@@ -10,9 +10,9 @@ use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Code;
-use webp_imageio_server::admission::RequestPolicy;
-use webp_imageio_server::config::Limits;
-use webp_imageio_server::proto as pb;
+use webp_sidecar::admission::RequestPolicy;
+use webp_sidecar::config::Limits;
+use webp_sidecar::proto as pb;
 
 fn sample(rel: &str) -> Vec<u8> {
     std::fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../samples").join(rel)).unwrap()

@@ -47,7 +47,7 @@ MAX_ARCHIVE_BYTES = 64 * 1024 * 1024  # 실제 약 20 MB. 비정상적으로 크
 
 def download(url: str) -> bytes:
     """URL을 메모리로 받는다. 크기 상한을 넘으면 실패한다."""
-    req = urllib.request.Request(url, headers={"User-Agent": "webp-imageio-samples-fetch/1"})
+    req = urllib.request.Request(url, headers={"User-Agent": "webp-sidecar-samples-fetch/1"})
     with urllib.request.urlopen(req, timeout=120) as resp:
         data = resp.read(MAX_ARCHIVE_BYTES + 1)
     if len(data) > MAX_ARCHIVE_BYTES:

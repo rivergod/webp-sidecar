@@ -5,8 +5,8 @@ mod common;
 use bytes::Bytes;
 use common::{TestServer, decode, decode_options, decode_raw, encode, get_features, pattern, psnr_rgb};
 use tonic::Code;
-use webp_imageio_server::config::Limits;
-use webp_imageio_server::proto as pb;
+use webp_sidecar::config::Limits;
+use webp_sidecar::proto as pb;
 
 const STILL: &[u8] = include_bytes!("../../spikes/testdata/still.webp");
 const ANIM: &[u8] = include_bytes!("../../spikes/testdata/anim.webp");

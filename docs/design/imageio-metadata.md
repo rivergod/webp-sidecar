@@ -1,21 +1,21 @@
 # ImageIO 메타데이터와 애니메이션 매핑
 
 - 상태: 구현됨(Phase 3). 결정: [ADR-0014](../adr/0014-animation-and-metadata-mapping.md), [ADR-0013](../adr/0013-client-package-and-imageio-mapping.md)
-- 코드: `client-jvm/src/main/java/net/rivergod/webp/imageio/` (`WebPStreamMetadata*`, `WebPImageMetadata*`, `AnimationStream`, `WebPImageReader`, `WebPImageWriter`)
+- 코드: `client-jvm/src/main/java/net/rivergod/webp/sidecar/` (`WebPStreamMetadata*`, `WebPImageMetadata*`, `AnimationStream`, `WebPImageReader`, `WebPImageWriter`)
 
 ## 1. 포맷 이름
 
-native 포맷 이름은 스트림과 이미지 메타데이터 모두 `net_rivergod_webp_imageio_1.0`이다(`WebPStreamMetadataFormat.NATIVE_FORMAT_NAME`). 표준 포맷(`javax_imageio_1.0`)은 이미지 메타데이터만 지원한다.
+native 포맷 이름은 스트림과 이미지 메타데이터 모두 `net_rivergod_webp_sidecar_1.0`이다(`WebPStreamMetadataFormat.NATIVE_FORMAT_NAME`). 표준 포맷(`javax_imageio_1.0`)은 이미지 메타데이터만 지원한다.
 
 ## 2. 스트림 메타데이터 (파일 단위)
 
 ```
-<net_rivergod_webp_imageio_1.0>
+<net_rivergod_webp_sidecar_1.0>
   <ICCProfile/>   userObject = byte[]  ICCP 청크 페이로드 원본 (RFC 9649 §2.7.1.4)
   <EXIF/>         userObject = byte[]  EXIF 청크 페이로드 원본 (§2.7.1.5, "Exif\0\0" 접두어도 그대로)
   <XMP/>          userObject = byte[]  XMP 청크 페이로드 원본 (§2.7.1.5)
   <Animation loopCount="0" backgroundColor="0xAARRGGBB"/>   애니메이션일 때만 (§2.7.1.1)
-</net_rivergod_webp_imageio_1.0>
+</net_rivergod_webp_sidecar_1.0>
 ```
 
 - 읽기: `getStreamMetadata()`. 리더를 `ignoreMetadata=true`로 설정하면 null이고, 서버에 메타데이터를 요청하지 않는다.
@@ -28,10 +28,10 @@ native 포맷 이름은 스트림과 이미지 메타데이터 모두 `net_river
 ### native
 
 ```
-<net_rivergod_webp_imageio_1.0>
+<net_rivergod_webp_sidecar_1.0>
   <Frame xOffset="…" yOffset="…" width="…" height="…" durationMs="100"
          blend="alphaBlend|noBlend" dispose="none|background" hasAlpha="TRUE|FALSE" compression="lossy|lossless"/>
-</net_rivergod_webp_imageio_1.0>
+</net_rivergod_webp_sidecar_1.0>
 ```
 
 - 읽기: `getImageMetadata(i)`는 i번째 ANMF의 값을 돌려준다. 좌표와 크기는 프레임 사각형이고, `read(i)`가 돌려주는 이미지는 그 프레임까지 합성한 **캔버스 전체**다. 정지 이미지는 캔버스 전체를 덮는 프레임 하나(`durationMs=0`)다.

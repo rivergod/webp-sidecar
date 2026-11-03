@@ -14,7 +14,7 @@
   - 빨강: 실패·중단
 - 클라이언트 상태와 서버 상태는 실제로는 동시에 진행한다. 그림은 둘을 연산 하나의 경로로 이어 그렸다. 예를 들어 플러그인이 "RPC 시도"에 있는 동안 서버는 "옵션 검사"부터 "응답 전송"까지 지난다.
 - "서버 프로세스"는 따로 돈다. 요청 흐름("옵션 검사"부터 "해제"까지)은 서버가 "서비스 중"일 때만 들어간다. 아니면 채널 단계에서 실패한다("WebP server unavailable").
-- 서버의 오류 상태는 모두 클라이언트에서 `IIOException`이 된다. 상태별 메시지는 [grpc-api.md §4](grpc-api.md)와 `client-jvm/src/main/java/net/rivergod/webp/imageio/GrpcErrors.java`에 있다. 혼잡 거부(`UNAVAILABLE` "server busy")만 설정한 횟수만큼 다시 시도한다([ADR-0020](../adr/0020-imageio-config-injection.md), 기본 0회).
+- 서버의 오류 상태는 모두 클라이언트에서 `IIOException`이 된다. 상태별 메시지는 [grpc-api.md §4](grpc-api.md)와 `client-jvm/src/main/java/net/rivergod/webp/sidecar/GrpcErrors.java`에 있다. 혼잡 거부(`UNAVAILABLE` "server busy")만 설정한 횟수만큼 다시 시도한다([ADR-0020](../adr/0020-imageio-config-injection.md), 기본 0회).
 
 ## 상태도
 
@@ -158,7 +158,7 @@ stateDiagram-v2
 | 허용 제어(대기 상한, 메모리 예산, 슬롯, 시간 상한) | `server/src/admission.rs`, [ADR-0016](../adr/0016-memory-budget-admission.md), [ADR-0017](../adr/0017-output-volume-limits.md) |
 | 요청 처리(옵션, 머리 읽기, 상한, 응답 조각, 오류 매핑) | `server/src/service.rs`, `server/src/webp.rs`, [grpc-api.md](grpc-api.md) §2–§4 |
 | 출력 버퍼 풀, 유휴 힙 반환 | `server/src/pool.rs`, `server/src/heap.rs`, [ADR-0018](../adr/0018-decode-output-buffer-pool.md), [ADR-0021](../adr/0021-glibc-distroless-image.md) |
-| 플러그인(SPI, 입력 판별, 설정 우선순위, RPC 순서, 재시도, 데드라인) | `client-jvm/src/main/java/net/rivergod/webp/imageio/`(`WebPImageReaderSpi`, `WebPImageReader`, `WebPImageWriter`, `WebPClient`, `StreamingCall`, `AnimationStream`, `GrpcErrors`, `ClientConfig`), [ADR-0013](../adr/0013-client-package-and-imageio-mapping.md), [ADR-0014](../adr/0014-animation-and-metadata-mapping.md), [ADR-0020](../adr/0020-imageio-config-injection.md) |
+| 플러그인(SPI, 입력 판별, 설정 우선순위, RPC 순서, 재시도, 데드라인) | `client-jvm/src/main/java/net/rivergod/webp/sidecar/`(`WebPImageReaderSpi`, `WebPImageReader`, `WebPImageWriter`, `WebPClient`, `StreamingCall`, `AnimationStream`, `GrpcErrors`, `ClientConfig`), [ADR-0013](../adr/0013-client-package-and-imageio-mapping.md), [ADR-0014](../adr/0014-animation-and-metadata-mapping.md), [ADR-0020](../adr/0020-imageio-config-injection.md) |
 | 컨테이너(seccomp EPERM, 메모리 제한, 소켓 권한·경로 길이, 재시작 정책) | [deploy/README.md](../../deploy/README.md), `deploy/compose.yaml` |
 
 확인 날짜: 2026-11-03(커밋 `5d5ce60` 기준). 코드를 바꿔 상태나 전이가 달라지면 이 그림을 같은 커밋에서 고친다.

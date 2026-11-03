@@ -82,7 +82,7 @@ def header() -> dict:
     """manifest 최상위 설명. 값은 모두 고정 문자열이라 결정적이다."""
     return {
         "schema_version": 1,
-        "description": "Test samples for webp-imageio-external-server-proto (ADR-0006). "
+        "description": "Test samples for webp-sidecar (ADR-0006). "
                        "Single source of truth; SOURCES.md is generated from this file.",
         "reference_decoder": {
             "name": "libwebp",

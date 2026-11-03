@@ -9,7 +9,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use webp_imageio_server::webp;
+use webp_sidecar::webp;
 
 /// 퍼징 속도를 위해 작게 둔다. 크기 검사는 같은 함수다.
 const MAX_SIDE: u32 = 32;
@@ -70,7 +70,11 @@ fuzz_target!(|data: &[u8]| {
 
     // 다시 읽기: 컨테이너 정보와 모든 프레임 합성.
     let info = webp::container_info(&file, MAX_FRAMES as u32).expect("encoded animation must demux");
-    assert!(!info.frames.is_empty() && info.frames.len() <= frames, "{} frames from {frames}", info.frames.len());
+    assert!(
+        !info.frames.is_empty() && info.frames.len() <= frames,
+        "{} frames from {frames}",
+        info.frames.len()
+    );
     let mut decoder = webp::AnimDecoder::new(&file).expect("encoded animation must open");
     let mut count = 0;
     while let Some((canvas, _)) = decoder.next_frame().expect("frame must decode") {

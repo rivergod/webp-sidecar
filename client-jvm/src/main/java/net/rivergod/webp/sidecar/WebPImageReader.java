@@ -1,0 +1,478 @@
+package net.rivergod.webp.sidecar;
+
+import com.google.protobuf.ByteString;
+import java.awt.Rectangle;
+import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferInt;
+import java.awt.image.SinglePixelPackedSampleModel;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.Iterator;
+import java.util.List;
+import javax.imageio.IIOException;
+import javax.imageio.ImageReadParam;
+import javax.imageio.ImageReader;
+import javax.imageio.ImageTypeSpecifier;
+import javax.imageio.metadata.IIOMetadata;
+import javax.imageio.spi.ImageReaderSpi;
+import javax.imageio.stream.ImageInputStream;
+import net.rivergod.webp.sidecar.proto.v1.DecodeOptions;
+import net.rivergod.webp.sidecar.proto.v1.FrameHeader;
+import net.rivergod.webp.sidecar.proto.v1.GetFeaturesResponse;
+import net.rivergod.webp.sidecar.proto.v1.ImageFeatures;
+import net.rivergod.webp.sidecar.proto.v1.PixelFormat;
+
+/**
+ * WebP {@link ImageReader}. 입력 전체를 읽어 서버에 보내고, 크기·프레임·메타데이터는 GetFeatures, 픽셀은 Decode
+ * (애니메이션 순차 읽기는 DecodeAnimation)로 받는다(docs/design/grpc-api.md, ADR-0014). 설정은 만들 때 받은
+ * {@link WebPClientConfig}를 먼저 쓰고, 읽기 한 번의 데드라인·픽셀 상한은 {@link WebPReadParam}으로 바꾼다(ADR-0020).
+ * ImageIO 규약대로 스레드 안전하지 않다.
+ */
+final class WebPImageReader extends ImageReader {
+
+    private final WebPClientConfig config;
+    private WebPClient client;
+    private long streamStart;
+    private byte[] data;
+    private GetFeaturesResponse features;
+    private AnimationStream cursor;
+
+    WebPImageReader(ImageReaderSpi spi, WebPClientConfig config) {
+        super(spi);
+        this.config = config;
+    }
+
+    /** 이 리더의 코드 설정(리더 단위 → SPI 단위를 합친 것). 시스템 프로퍼티·환경변수는 첫 호출 때 채운다. */
+    WebPClientConfig config() {
+        return config;
+    }
+
+    /**
+     * 기본 읽기 파라미터. 표준 항목에 더해 데드라인과 클라이언트 픽셀 상한을 바꿀 수 있다(ADR-0020).
+     *
+     * @return 새 {@link WebPReadParam}
+     */
+    @Override
+    public ImageReadParam getDefaultReadParam() {
+        return new WebPReadParam();
+    }
+
+    @Override
+    public void setInput(Object input, boolean seekForwardOnly, boolean ignoreMetadata) {
+        super.setInput(input, seekForwardOnly, ignoreMetadata);
+        clearCache();
+        streamStart = 0;
+        if (input instanceof ImageInputStream in) {
+            try {
+                streamStart = in.getStreamPosition();
+            } catch (IOException e) {
+                streamStart = 0;
+            }
+        }
+    }
+
+    private void clearCache() {
+        closeCursor();
+        data = null;
+        features = null;
+    }
+
+    /** ADR-0014: 열어 둔 스트림은 서버 슬롯을 차지하므로 입력이 바뀌거나 리더를 버릴 때 바로 취소한다. */
+    private void closeCursor() {
+        if (cursor != null) {
+            cursor.close();
+            cursor = null;
+        }
+    }
+
+    private WebPClient client() throws IIOException {
+        if (client == null) {
+            client = WebPClient.of(config);
+        }
+        return client;
+    }
+
+    /** ADR-0020: {@link WebPReadParam}의 데드라인·픽셀 상한을 이 읽기에만 쓴다. */
+    private WebPClient callClient(ImageReadParam param) throws IIOException {
+        WebPClient base = client();
+        return param instanceof WebPReadParam p ? base.forCall(p.getDeadlineMs(), p.getMaxPixels()) : base;
+    }
+
+    /** 입력 전체(서버 max_input_bytes 이하)를 한 번 읽어 기억한다. */
+    private byte[] data() throws IOException {
+        if (data != null) {
+            return data;
+        }
+        if (!(getInput() instanceof ImageInputStream in)) {
+            throw new IllegalStateException("No input source set");
+        }
+        long max = client().limits().getMaxInputBytes();
+        if (in.getStreamPosition() != streamStart) {
+            in.seek(streamStart);
+        }
+        // 길이를 알면 먼저 상한을 검사하고 정확한 크기로 읽는다. 모르면 상한까지만 읽는다.
+        long length = in.length();
+        if (length >= 0) {
+            long size = length - streamStart;
+            if (size > max) {
+                throw new IIOException("WebP input of " + size + " bytes exceeds server limit " + max + " bytes");
+            }
+            byte[] bytes = new byte[(int) size];
+            in.readFully(bytes);
+            data = bytes;
+        } else {
+            ByteArrayOutputStream out = new ByteArrayOutputStream(64 * 1024);
+            byte[] buf = new byte[64 * 1024];
+            long total = 0;
+            for (int r; (r = in.read(buf)) > 0; ) {
+                total += r;
+                if (total > max) {
+                    throw new IIOException("WebP input exceeds server limit " + max + " bytes");
+                }
+                out.write(buf, 0, r);
+            }
+            data = out.toByteArray();
+        }
+        if (data.length == 0) {
+            throw new IIOException("Empty WebP input");
+        }
+        return data;
+    }
+
+    private GetFeaturesResponse response() throws IOException {
+        return response(client());
+    }
+
+    /** GetFeatures 결과를 한 번만 받아 기억한다. {@code read}는 그 읽기의 데드라인으로 부른다(ADR-0020). */
+    private GetFeaturesResponse response(WebPClient via) throws IOException {
+        if (features == null) {
+            features = via.getFeatures(data(), !ignoreMetadata);
+        }
+        return features;
+    }
+
+    private ImageFeatures features() throws IOException {
+        return response().getFeatures();
+    }
+
+    private void checkIndex(int imageIndex) throws IOException {
+        int count = features().getFrameCount();
+        if (imageIndex < 0 || imageIndex >= count) {
+            throw new IndexOutOfBoundsException("imageIndex " + imageIndex + " out of range [0, " + count + ")");
+        }
+    }
+
+    @Override
+    public int getNumImages(boolean allowSearch) throws IOException {
+        return features().getFrameCount();
+    }
+
+    @Override
+    public int getWidth(int imageIndex) throws IOException {
+        checkIndex(imageIndex);
+        return features().getWidth();
+    }
+
+    @Override
+    public int getHeight(int imageIndex) throws IOException {
+        checkIndex(imageIndex);
+        return features().getHeight();
+    }
+
+    /** alpha가 있거나 애니메이션(합성 캔버스는 투명할 수 있다)이면 TYPE_INT_ARGB, 아니면 TYPE_INT_RGB(ADR-0013). */
+    @Override
+    public Iterator<ImageTypeSpecifier> getImageTypes(int imageIndex) throws IOException {
+        checkIndex(imageIndex);
+        ImageFeatures f = features();
+        int type = f.getHasAlpha() || f.getHasAnimation() ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB;
+        return List.of(ImageTypeSpecifier.createFromBufferedImageType(type)).iterator();
+    }
+
+    /** ICC/EXIF/XMP와 애니메이션 전체 정보(ADR-0014). {@code ignoreMetadata}면 null. */
+    @Override
+    public IIOMetadata getStreamMetadata() throws IOException {
+        if (ignoreMetadata) {
+            return null;
+        }
+        GetFeaturesResponse r = response();
+        return WebPStreamMetadata.from(r.hasMetadata() ? r.getMetadata() : null,
+                r.getFeatures().hasAnimation() ? r.getFeatures().getAnimation() : null);
+    }
+
+    /** 프레임 정보(native)와 표준 포맷 노드(ADR-0014). {@code ignoreMetadata}면 null. */
+    @Override
+    public IIOMetadata getImageMetadata(int imageIndex) throws IOException {
+        checkIndex(imageIndex);
+        if (ignoreMetadata) {
+            return null;
+        }
+        ImageFeatures f = features();
+        if (f.getHasAnimation() && f.getAnimation().getFramesCount() > imageIndex) {
+            return WebPImageMetadata.forFrame(f.getAnimation().getFrames(imageIndex));
+        }
+        return WebPImageMetadata.forStill(f);
+    }
+
+    @Override
+    public BufferedImage read(int imageIndex, ImageReadParam param) throws IOException {
+        // 정지 이미지를 기본 파라미터로 처음 읽을 때는 GetFeatures 없이 Decode 하나만 부른다(입력도 한 번만 보낸다).
+        // 크기와 alpha는 Decode 응답 헤더로 알고, 대상 이미지는 헤더 검증 뒤에 만든다. 애니메이션은 순차 스트림을
+        // 써야 하므로(ADR-0014) 기존 경로로 간다. 애니메이션 여부는 파일 머리를 로컬에서 읽어 판단한다.
+        WebPClient call = callClient(param);
+        if (features == null && imageIndex == 0 && isPlainParam(param) && isLocalStill(data())) {
+            return readStillWithoutFeatures(call);
+        }
+        ImageFeatures f = response(call).getFeatures();
+        checkIndex(imageIndex);
+        if (param != null && (param.getSourceBands() != null || param.getDestinationBands() != null)) {
+            throw new IllegalArgumentException("source/destination bands are not supported");
+        }
+        int width = f.getWidth();
+        int height = f.getHeight();
+        checkPixelLimits(call, width, height);
+
+        // 대상 이미지와 영역을 정한다. 기본 경우(영역·서브샘플링 없음, 표준 int 타입)면 대상 버퍼에 직접 쓴다.
+        BufferedImage dest = getDestination(param, getImageTypes(imageIndex), width, height);
+        Rectangle src = new Rectangle();
+        Rectangle dst = new Rectangle();
+        computeRegions(param, width, height, dest, src, dst);
+        boolean direct = isDirect(param, dest, width, height, src, dst);
+        int[] target = direct ? ((DataBufferInt) dest.getRaster().getDataBuffer()).getData() : null;
+        boolean alpha = !direct || dest.getColorModel().hasAlpha();
+
+        clearAbortRequest();
+        processImageStarted(imageIndex);
+        long maxPixels = call.config().maxPixels();
+        ArgbFrameSink sink = new ArgbFrameSink(width, height, maxPixels, alpha, target);
+        ProgressReceiver receiver = new ProgressReceiver(sink, imageIndex, (long) width * height * 4);
+        try {
+            if (f.getHasAnimation()) {
+                readAnimationFrame(call, imageIndex, receiver, maxPixels);
+            } else {
+                call.decode(data(), decodeOptions(imageIndex, maxPixels), receiver);
+            }
+        } catch (IIOException e) {
+            if (abortRequested()) {
+                closeCursor();
+                processReadAborted();
+                return dest;
+            }
+            throw e;
+        }
+
+        if (!direct) {
+            copyRegion(sink.argb(), width, src, dst, param, dest);
+        }
+        processImageComplete();
+        return dest;
+    }
+
+    private BufferedImage readStillWithoutFeatures(WebPClient call) throws IOException {
+        clearAbortRequest();
+        processImageStarted(0);
+        long maxPixels = call.config().maxPixels();
+        BufferedImage[] dest = new BufferedImage[1];
+        // getImageTypes와 같은 규칙: alpha가 있으면 TYPE_INT_ARGB, 없으면 TYPE_INT_RGB(ADR-0013).
+        ArgbFrameSink sink = ArgbFrameSink.allocatingOnHeader(maxPixels, h -> {
+            dest[0] = new BufferedImage(h.getWidth(), h.getHeight(),
+                    h.getHasAlpha() ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
+            return ((DataBufferInt) dest[0].getRaster().getDataBuffer()).getData();
+        });
+        ProgressReceiver receiver = new ProgressReceiver(sink, 0, -1);
+        try {
+            call.decode(data(), decodeOptions(0, maxPixels), receiver);
+        } catch (IIOException e) {
+            if (abortRequested()) {
+                processReadAborted();
+                return dest[0];
+            }
+            throw e;
+        }
+        processImageComplete();
+        return dest[0];
+    }
+
+    /** 영역, 서브샘플링, 대상 이미지·타입·오프셋, 밴드를 하나도 지정하지 않은 파라미터인지. */
+    static boolean isPlainParam(ImageReadParam param) {
+        if (param == null) {
+            return true;
+        }
+        java.awt.Point offset = param.getDestinationOffset();
+        return param.getSourceRegion() == null
+                && param.getSourceXSubsampling() == 1 && param.getSourceYSubsampling() == 1
+                && param.getSubsamplingXOffset() == 0 && param.getSubsamplingYOffset() == 0
+                && param.getDestination() == null && param.getDestinationType() == null
+                && (offset == null || (offset.x == 0 && offset.y == 0))
+                && param.getSourceBands() == null && param.getDestinationBands() == null;
+    }
+
+    /**
+     * 파일 머리만 보고 애니메이션이 아닌 WebP인지 판단한다(네트워크 없음, RFC 9649 §2.4–2.7). 첫 청크가 {@code VP8 } 또는
+     * {@code VP8L}이면 정지 이미지이고, {@code VP8X}면 플래그의 애니메이션 비트(0x02)가 꺼져 있을 때 정지 이미지다. 판단할 수
+     * 없으면 false(기존 경로가 서버에서 검증한다).
+     */
+    static boolean isLocalStill(byte[] d) {
+        if (d.length < 21 || d[0] != 'R' || d[1] != 'I' || d[2] != 'F' || d[3] != 'F'
+                || d[8] != 'W' || d[9] != 'E' || d[10] != 'B' || d[11] != 'P' || d[12] != 'V' || d[13] != 'P'
+                || d[14] != '8') {
+            return false;
+        }
+        return switch (d[15]) {
+            case ' ', 'L' -> true;
+            case 'X' -> (d[20] & 0x02) == 0;
+            default -> false;
+        };
+    }
+
+    private static DecodeOptions decodeOptions(int frameIndex, long maxPixels) {
+        DecodeOptions.Builder options = DecodeOptions.newBuilder()
+                .setFrameIndex(frameIndex)
+                .setPixelFormat(PixelFormat.PIXEL_FORMAT_RGBA8);
+        if (maxPixels > 0) {
+            options.setMaxPixels(maxPixels);
+        }
+        return options.build();
+    }
+
+    /**
+     * ADR-0014 순차 읽기: 열어 둔 스트림의 다음 프레임이면 거기서 받고, 0번이면 스트림을 연다. 그 밖에는 스트림을 닫고
+     * Decode(frame_index)로 한 프레임만 받는다. 스트림이 실패하면(데드라인 등) 닫고 Decode로 한 번 다시 받는다.
+     */
+    private void readAnimationFrame(WebPClient call, int imageIndex, ProgressReceiver receiver, long maxPixels)
+            throws IOException {
+        if (cursor != null && cursor.nextFrame() == imageIndex) {
+            try {
+                cursor.readFrame(receiver);
+                return;
+            } catch (IIOException e) {
+                closeCursor();
+                if (abortRequested() || receiver.started()) {
+                    throw e;
+                }
+            }
+        } else {
+            closeCursor();
+            if (imageIndex == 0) {
+                cursor = call.openDecodeAnimation(data(), maxPixels);
+                cursor.readFrame(receiver);
+                return;
+            }
+        }
+        call.decode(data(), decodeOptions(imageIndex, maxPixels), receiver);
+    }
+
+    /**
+     * 대상 버퍼를 할당하기 전에 크기를 검사한다(클라이언트 쪽 decompression bomb 방어, docs/design/grpc-api.md §3).
+     * 서버도 같은 검사를 하지만, 대상 이미지는 Decode를 부르기 전에 만들어지므로 여기서 먼저 막아야 한다.
+     */
+    private void checkPixelLimits(WebPClient call, int width, int height) throws IIOException {
+        long pixels = (long) width * height;
+        long serverMax = call.limits().getMaxPixels();
+        if (serverMax > 0 && pixels > serverMax) {
+            throw new IIOException("WebP image exceeds server limit: " + width + "x" + height + " = " + pixels
+                    + " pixels > max_pixels " + serverMax);
+        }
+        long clientMax = call.config().maxPixels();
+        if (clientMax > 0 && pixels > clientMax) {
+            throw new IIOException("WebP image " + width + "x" + height + " exceeds client limit " + clientMax
+                    + " pixels (webp.sidecar.max-pixels)");
+        }
+        if (pixels > ArgbFrameSink.MAX_ARRAY_PIXELS) {
+            throw new IIOException("WebP image " + width + "x" + height + " does not fit in a Java array");
+        }
+    }
+
+    private static boolean isDirect(
+            ImageReadParam param, BufferedImage dest, int width, int height, Rectangle src, Rectangle dst) {
+        boolean defaultParam = param == null
+                || (param.getSourceXSubsampling() == 1 && param.getSourceYSubsampling() == 1);
+        boolean fullRegions = src.x == 0 && src.y == 0 && src.width == width && src.height == height
+                && dst.x == 0 && dst.y == 0 && dst.width == width && dst.height == height;
+        boolean standardType = (dest.getType() == BufferedImage.TYPE_INT_ARGB || dest.getType() == BufferedImage.TYPE_INT_RGB)
+                && dest.getWidth() == width && dest.getHeight() == height
+                && dest.getRaster().getSampleModel() instanceof SinglePixelPackedSampleModel sm
+                && sm.getScanlineStride() == width
+                && dest.getRaster().getDataBuffer().getOffset() == 0
+                && dest.getRaster().getSampleModelTranslateX() == 0
+                && dest.getRaster().getSampleModelTranslateY() == 0;
+        return defaultParam && fullRegions && standardType;
+    }
+
+    /** 전체 ARGB에서 소스 영역을 서브샘플링해 대상 영역으로 옮긴다(setRGB가 대상 타입으로 변환한다). */
+    private static void copyRegion(int[] argb, int width, Rectangle src, Rectangle dst, ImageReadParam param, BufferedImage dest) {
+        int xs = param == null ? 1 : param.getSourceXSubsampling();
+        int ys = param == null ? 1 : param.getSourceYSubsampling();
+        int[] row = new int[dst.width];
+        for (int j = 0; j < dst.height; j++) {
+            int base = (src.y + j * ys) * width + src.x;
+            for (int k = 0; k < dst.width; k++) {
+                row[k] = argb[base + k * xs];
+            }
+            dest.setRGB(dst.x, dst.y + j, dst.width, 1, row, 0, dst.width);
+        }
+    }
+
+    /** 진행률을 알리고 abort 요청과 프레임 번호를 확인하는 수신기 래퍼. */
+    private final class ProgressReceiver implements WebPClient.FrameReceiver {
+        private final ArgbFrameSink sink;
+        private final int frameIndex;
+        private long totalBytes;
+        private long received;
+        private int lastPercent = -1;
+        private boolean started;
+
+        /** totalBytes가 0 이하이면 헤더의 pixel_bytes를 쓴다(크기를 미리 모를 때). */
+        ProgressReceiver(ArgbFrameSink sink, int frameIndex, long totalBytes) {
+            this.sink = sink;
+            this.frameIndex = frameIndex;
+            this.totalBytes = totalBytes;
+        }
+
+        /** 헤더를 이미 받았으면 true(그 뒤의 실패는 다른 경로로 다시 받을 수 없다). */
+        boolean started() {
+            return started;
+        }
+
+        @Override
+        public void header(FrameHeader header) throws IIOException {
+            if (header.getFrameIndex() != frameIndex) {
+                throw new IIOException("WebP server sent frame " + header.getFrameIndex() + ", expected " + frameIndex);
+            }
+            started = true;
+            sink.header(header);
+            if (totalBytes <= 0) {
+                totalBytes = header.getPixelBytes();
+            }
+        }
+
+        @Override
+        public void pixels(ByteString chunk) throws IIOException {
+            if (abortRequested()) {
+                throw new IIOException("read aborted");
+            }
+            sink.pixels(chunk);
+            received += chunk.size();
+            int percent = (int) (received * 100 / Math.max(1, totalBytes));
+            if (percent != lastPercent) {
+                lastPercent = percent;
+                processImageProgress(percent);
+            }
+        }
+
+        @Override
+        public void finish() throws IIOException {
+            sink.finish();
+        }
+    }
+
+    @Override
+    public void reset() {
+        super.reset();
+        clearCache();
+    }
+
+    @Override
+    public void dispose() {
+        clearCache();
+    }
+}

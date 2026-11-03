@@ -14,8 +14,8 @@ OUT=$(realpath -m "$1")
 WARM_MIN=${2:-20}
 cd "$(dirname "$0")/../.."
 ROOT=$PWD
-IMAGE=${3:-webp-imageio-server:dev}
-SECCOMP=${4:-$ROOT/deploy/seccomp/webp-imageio-server.json}
+IMAGE=${3:-webp-sidecar:dev}
+SECCOMP=${4:-$ROOT/deploy/seccomp/webp-sidecar.json}
 LIB="$ROOT/bench/build/install/bench/lib"
 JAVA=$(cat "$ROOT/bench/build/install/bench/java-executable.txt")
 mkdir -p "$OUT"
@@ -38,7 +38,7 @@ docker run -d --name "$CNAME" --user "$(id -u):$(id -g)" \
   --read-only --network none --cap-drop ALL --security-opt no-new-privileges \
   --security-opt "seccomp=$SECCOMP" \
   --memory 1g --memory-swap 1g --cpus 2 --cpuset-cpus 12,14 --pids-limit 128 \
-  -v "$SOCK:/run/webp-imageio" "$IMAGE" >/dev/null
+  -v "$SOCK:/run/webp-sidecar" "$IMAGE" >/dev/null
 for _ in $(seq 100); do [ -S "$SOCK/webp.sock" ] && break; sleep 0.1; done
 [ -S "$SOCK/webp.sock" ] || { docker logs "$CNAME" >&2; exit 1; }
 pid=$(docker inspect "$CNAME" --format '{{.State.Pid}}')
@@ -80,9 +80,9 @@ log "warm ${WARM_MIN}min"
 echo warm >"$PHASE_FILE"
 pids=()
 for i in 1 2 3; do
-  taskset -c 0,2,4,6 "$JAVA" -Xms1g -Xmx2g -Dwebp.imageio.endpoint="unix://$SOCK/webp.sock" \
-    -Dwebp.imageio.busy-retries=3 -Dwebp.bench.samples="$ROOT/samples" \
-    -cp "$LIB/*" net.rivergod.webp.imageio.bench.MixedLoad mixed 4 $((WARM_MIN * 60)) 60 \
+  taskset -c 0,2,4,6 "$JAVA" -Xms1g -Xmx2g -Dwebp.sidecar.endpoint="unix://$SOCK/webp.sock" \
+    -Dwebp.sidecar.busy-retries=3 -Dwebp.bench.samples="$ROOT/samples" \
+    -cp "$LIB/*" net.rivergod.webp.sidecar.bench.MixedLoad mixed 4 $((WARM_MIN * 60)) 60 \
     >"$OUT/warm-$i.txt" 2>"$OUT/warm-$i.err" &
   pids+=($!)
 done
@@ -99,8 +99,8 @@ for spec in decode-lossless:8192 decode-lossy:8192 encode-lossless:4096 encode-l
   log "worst $op $side"
   echo "worst-$op-$side" >"$PHASE_FILE"
   before=$(anon)
-  if R=$(cd server && WEBP_IMAGEIO_TEST_UDS="$SOCK/webp.sock" WEBP_IMAGEIO_TEST_OP="$op" WEBP_IMAGEIO_TEST_SIDE="$side" \
-      WEBP_IMAGEIO_TEST_CONCURRENT=2 cargo test -q --release --test memory_budget -- --ignored 2>&1); then
+  if R=$(cd server && WEBP_SIDECAR_TEST_UDS="$SOCK/webp.sock" WEBP_SIDECAR_TEST_OP="$op" WEBP_SIDECAR_TEST_SIDE="$side" \
+      WEBP_SIDECAR_TEST_CONCURRENT=2 cargo test -q --release --test memory_budget -- --ignored 2>&1); then
     result=ok
   else
     result="FAILED($(printf '%s\n' "$R" | sed -n 's/.* failed: \([A-Za-z]*\) .*/\1/p' | head -1))"
